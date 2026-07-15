@@ -7,7 +7,7 @@
 **English** | [简体中文](README.zh-cn.md)
 
 LuCI app for the [NetBird](https://netbird.io) mesh-VPN client on OpenWrt / ImmortalWrt — manage NetBird on OpenWrt from the router, no command line needed.
-Compatible with OpenWrt / ImmortalWrt 24.x (`opkg`) and 25.x / current snapshots (`apk`).
+Compatible with OpenWrt / ImmortalWrt 23.05 / 24.x (`opkg`) and 25.x / current snapshots (`apk`).
 
 ## Features
 
@@ -48,7 +48,7 @@ opkg install luci-app-netbird
 Runtime deps (usually present): `rpcd`, `rpcd-mod-ucode`, `luci-base`, `netbird`, `conntrack`.
 
 ```sh
-# OpenWrt / ImmortalWrt 24.10 (opkg)
+# OpenWrt / ImmortalWrt 23.05 / 24.10 (opkg)
 opkg install rpcd rpcd-mod-ucode luci-base netbird
 opkg install luci-app-netbird_*.ipk
 # OpenWrt / ImmortalWrt 25+ (apk)
@@ -81,6 +81,7 @@ Add this repo to an OpenWrt / ImmortalWrt SDK or buildroot (under `package/` or 
 
 - Verified on x86_64; other architectures (arm64 / 386 / armv6) are supported but less tested.
 - SSH extensions (root login / SFTP / port forwarding) require netbird 0.72.x+.
+- The OpenWrt 23.05 package feed ships an old netbird (0.24.x): connect / status / settings work, but exit-node selection needs netbird 0.35+ — switch the binary to the latest official release on the **Versions** tab after installing.
 - `/etc/config/netbird` is a conffile — settings are kept across upgrades.
 
 ## License

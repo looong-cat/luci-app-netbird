@@ -14,6 +14,10 @@ fi
 # branch by release; the package is arch-independent (PKGARCH:=all)
 . /etc/openwrt_release
 case "$DISTRIB_RELEASE" in
+	# 23.05 is opkg-based and the package is arch-independent, so the
+	# 24.10 ipk feed installs there unchanged (all runtime deps —
+	# rpcd-mod-ucode, ucode, conntrack, netbird — exist in 23.05 feeds).
+	*23.05*) BRANCH="openwrt-24.10" ;;
 	*24.10*) BRANCH="openwrt-24.10" ;;
 	*25.12*) BRANCH="openwrt-25.12" ;;
 	*SNAPSHOT*)
@@ -22,11 +26,11 @@ case "$DISTRIB_RELEASE" in
 			# so the 25.12 apk feed installs there unchanged.
 			BRANCH="openwrt-25.12"
 		else
-			echo "opkg-based snapshot builds are not supported; use a 24.10/25.12 release or a current apk-based snapshot." >&2
+			echo "opkg-based snapshot builds are not supported; use a 23.05/24.10/25.12 release or a current apk-based snapshot." >&2
 			exit 1
 		fi
 		;;
-	*) echo "Unsupported release: $DISTRIB_RELEASE (supported: 24.10, 25.12, snapshot)." >&2; exit 1 ;;
+	*) echo "Unsupported release: $DISTRIB_RELEASE (supported: 23.05, 24.10, 25.12, snapshot)." >&2; exit 1 ;;
 esac
 FEED="$REPO/$BRANCH/all/$NAME"
 

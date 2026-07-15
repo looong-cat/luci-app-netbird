@@ -1589,6 +1589,12 @@ function _openwrt_release_string() {
 
 function _openwrt_series() {
     let rel = _openwrt_release_string();
+    // 23.05(opkg)与 24.10 共用 ipk 软件源:包 PKGARCH:=all 且运行依赖
+    // (rpcd-mod-ucode/ucode/conntrack/netbird)在 23.05 官方源齐备,直接映射同系列。
+    // 注意 23.05 官方源 netbird 较旧(0.24.x,无 networks 子命令):基础连接/状态可用,
+    // exit node 需在「版本」页切换到官方 release 二进制(≥0.35)。
+    if (match(rel, /^23\.05(\.|$)/))
+        return '24.10';
     if (match(rel, /^24\.10(\.|$)/))
         return '24.10';
     if (match(rel, /^25\.12(\.|$)/))

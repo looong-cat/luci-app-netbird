@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r13 — 2026-07-15
+
+### Added
+
+- OpenWrt / ImmortalWrt 23.05 (`opkg`) support: the package is architecture-independent and all runtime dependencies (`rpcd-mod-ucode`, `ucode`, `conntrack`, `netbird`) are available in the 23.05 feeds, so the 24.10 ipk feed installs there unchanged. The feed script and the in-app updater now recognize 23.05 releases. Verified on OpenWrt 23.05.4. Note: the 23.05 packages feed ships an old netbird (0.24.x) — connect / status / settings work, but exit-node selection needs netbird 0.35+; switch the binary to the latest official release on the Versions tab.
+
 ## 0.1.0-r12 — 2026-07-14
 
 ### Added
