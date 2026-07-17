@@ -113,6 +113,7 @@ Feed selection is by OpenWrt release series:
 
 | OpenWrt series | Package manager | Feed | Package filename |
 |---|---|---|---|
+| 23.05 | `opkg` | `https://luci-app-netbird.okk.sh/openwrt-24.10/all/netbird/` (shares the 24.10 feed — the package is `PKGARCH:=all`) | `luci-app-netbird_<ver>_all.ipk` |
 | 24.10 | `opkg` | `https://luci-app-netbird.okk.sh/openwrt-24.10/all/netbird/` | `luci-app-netbird_<ver>_all.ipk` |
 | 25.12 | `apk` | `https://luci-app-netbird.okk.sh/openwrt-25.12/all/netbird/` | `luci-app-netbird-<ver>.apk` |
 
