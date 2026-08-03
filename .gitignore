@@ -28,3 +28,25 @@ uc.out
 
 # Matt / engineering-skill local bridge (if ever created; not used by default)
 /docs/agents/
+
+# --- Defence in depth: never commit credential-shaped files ---------------------
+# The rules above are exact paths. They only stop the private files we already know
+# about. The repo root is now also the working root, so anything a script or tool
+# drops in the working directory lands *inside* the repository -- these patterns
+# catch the credential-shaped strays that the exact paths would miss.
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ecdsa*
+id_ed25519*
+/keys/
+# ...except the signing PUBLIC key, which is meant to be published with the feed.
+!feed/public-key.pem
+
+# Stray logs / archives / local build trees at the repo root
+*.log
+*.tar
+/build/
