@@ -84,8 +84,9 @@ Add this repo to an OpenWrt / ImmortalWrt SDK or buildroot (under `package/` or 
 - Older package feeds ship an old netbird — 23.05 has 0.24.x, 22.03 has 0.17.x: connect / status / settings work, but exit-node selection needs netbird 0.35+ — switch the binary to the latest official release on the **Versions** tab after installing. On 22.03 this switch is strongly recommended.
 - NetBird needs either the kernel WireGuard module or a TUN device. Stock OpenWrt images ship
   neither `kmod-wireguard` nor `kmod-tun` by default, and the `netbird` package does not depend on
-  them. If NetBird fails to start with `tun module not available`, install one of them:
-  `opkg install kmod-wireguard` (preferred) or `opkg install kmod-tun`.
+  them. The Overview and Status pages detect this and offer a one-click **Install** button that
+  pulls the right package; on firmware with a custom kernel the feed modules may not match, and the
+  app then shows the package manager's own output so you can install a matching build yourself.
 - `/etc/config/netbird` is a conffile — settings are kept across upgrades.
 
 ## License

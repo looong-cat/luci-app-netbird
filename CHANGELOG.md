@@ -3,6 +3,18 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r14 — 2026-08-04
+
+### Added
+
+- OpenWrt / ImmortalWrt **22.03** (`opkg`) support. 22.03 is the oldest series that can run this app — it is the first one shipping `ucode` and `rpcd-mod-ucode`, which the whole backend is written in (21.02 and older ship neither and are rejected by the feed script). The package is architecture-independent and every runtime dependency (`rpcd-mod-ucode`, `ucode`, `conntrack`, `netbird`) exists in the 22.03 feeds, so the 24.10 ipk feed installs there unchanged. The feed script and the in-app updater both recognize 22.03 releases. Verified on OpenWrt 22.03.6: signed-feed install, first-run initialization, every ubus method registering, the settings apply pipeline, and the LuCI pages' API surface. Note: the 22.03 packages feed ships a very old netbird (0.17.x) — connect / status / settings work, but exit-node selection needs netbird 0.35+; switching the binary to the latest official release on the Versions tab is strongly recommended there.
+- The Overview and Status pages now detect when neither the WireGuard kernel module nor a TUN device is available, and offer a one-click **Install** button that fetches the needed kernel package for you. NetBird requires one of them to create its interface, stock OpenWrt images ship neither, and the `netbird` package does not depend on them — previously this surfaced only as a service that would not start. The install prefers `kmod-wireguard` and only falls back to `kmod-tun` if the interface backend is still unavailable; it never touches the `netbird` package itself. If the packages cannot be installed the raw package-manager output is shown together with a plain-language reason — most often that the feed's kernel modules do not match the running kernel, which is normal on vendor firmware built with a custom kernel; in that case install modules matching your own kernel. The detection is read-only and stays silent whenever the kernel module tree cannot be inspected confidently, so systems with WireGuard built into the kernel are not flagged, and the button never appears on devices where the interface backend already works.
+
+### Fixed
+
+- The backend could not be parsed by the `ucode` version shipped in older OpenWrt releases, because a local variable used the reserved word `from`. This made the whole app unusable on 22.03 (no ubus methods registered at all).
+- The in-app updater reported `Unsupported OpenWrt release` on 22.03, so checking for and installing app updates from the LuCI UI did not work there.
+
 ## 0.1.0-r13 — 2026-07-17
 
 ### Added

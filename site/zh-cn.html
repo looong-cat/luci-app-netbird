@@ -338,6 +338,13 @@
         三步完成 <strong>NetBird 在 OpenWrt 上的配置</strong>。
         自托管用户请先填写管理 URL。
       </p>
+      <p class="section-desc">
+        <strong>前置条件：</strong>NetBird 需要内核 WireGuard 模块或 TUN 设备二者之一。
+        官方 OpenWrt 镜像默认都不带，<code>netbird</code> 软件包也不依赖它们。
+        概览页与状态页会自动检测，并提供<strong>一键安装</strong>按钮替你装好所需的内核模块，
+        无需进命令行。若你的固件用的是定制内核，软件源里的模块可能不匹配，
+        此时界面会原样展示包管理器的输出，便于判断该装哪个版本。
+      </p>
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>

@@ -345,6 +345,14 @@
         Get <strong>NetBird running on OpenWrt</strong> in three steps.
         For self-hosted users, fill in the Management URL first.
       </p>
+      <p class="section-desc">
+        <strong>Prerequisite:</strong> NetBird needs either the WireGuard kernel module or a
+        TUN device. Stock OpenWrt images ship neither, and the <code>netbird</code> package does
+        not depend on them. The Overview and Status pages detect this and offer a one-click
+        <strong>Install</strong> button that pulls the right kernel package for you — no shell
+        needed. If your firmware ships a custom kernel the feed modules may not match; the app
+        then shows the package manager's own output so you know what to install instead.
+      </p>
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>
