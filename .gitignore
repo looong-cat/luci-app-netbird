@@ -14,6 +14,17 @@ uc.out
 *.swp
 *~
 
-# Local agent entry files (kept at the parent workspace root, not published)
-CLAUDE.md
-AGENTS.md
+# Local agent entry (repo root = working root; never published)
+/CLAUDE.md
+/AGENTS.md
+
+# Private workspace tree (independent local git; never published)
+/workspace/
+
+# Local tool indexes / agent state at repo root
+/.codegraph/
+/.claude/
+/.scratch/
+
+# Matt / engineering-skill local bridge (if ever created; not used by default)
+/docs/agents/
