@@ -2295,7 +2295,9 @@ function _update_binary_locked(req) {
             return fail_work(CODE.INSTALL_FAILED, 'Could not parse a valid version from the binary (' + substr(new_ver, 0, 40) + '); refusing to save it by name.');
         target_path = _custom_version_path(sv);
     }
-    let from = access(target_path, 'x') ? _file_version(target_path) : '';
+    // 变量名避开 `from`:它在较早的 ucode 里是保留字(import ... from ...),
+    // 用作标识符会让整个文件解析失败。返回体的 `from` 键名不变。
+    let from_ver = access(target_path, 'x') ? _file_version(target_path) : '';
 
     // step 8 — 备份目标(若存在);仅当目标正是当前运行的二进制时才停 daemon(避 ETXTBSY,所有 sibling 分支一致)
     _progress_phase('installing', 'Installing binary...', tgz_path, progress_total);
@@ -2370,7 +2372,7 @@ function _update_binary_locked(req) {
     cleanup();
     _popen_simple('rm -f ' + shell_quote(bak_path) + ' 2>/dev/null');
 
-    return ok({ from: from, to: to, active_source: _active_source(), checksum_note: checksum_note, path: target_path, custom: is_custom });
+    return ok({ from: from_ver, to: to, active_source: _active_source(), checksum_note: checksum_note, path: target_path, custom: is_custom });
 }
 // _do_update_binary(req) — _update_binary_locked 的互斥包装(二进制操作串行,见 _binop_guard)。
 function _do_update_binary(req) { return _binop_guard(_update_binary_locked, req); }
