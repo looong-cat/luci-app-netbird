@@ -173,6 +173,21 @@ function renderEmpty(state) {
 	]);
 }
 
+// iface_backend.ready === false：高置信缺少内核 WireGuard 与 TUN。
+// 旧后端无该字段时跳过，保持向前/向后兼容。
+function renderIfaceBackendWarning(ifaceBackend) {
+	if (!ifaceBackend || ifaceBackend.ready !== false)
+		return null;
+	return E('div', { 'class': 'alert-message warning' }, [
+		E('p', {}, [
+			E('strong', {}, _('WireGuard / TUN backend missing')),
+			E('br'),
+			_('NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device.')
+		]),
+		E('p', {}, _('Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again.').format('opkg'))
+	]);
+}
+
 // L.Poll 节奏：running+connected 5s；running 但未连 30s；非 running 不轮询。
 function pollInterval(state, connected) {
 	if (state !== 'running') return 0;
@@ -186,9 +201,14 @@ return view.extend({
 
 	render: function (statusRes) {
 		var state = (statusRes && statusRes.ok && statusRes.data && statusRes.data.status) || 'unknown';
+		var ifaceBackend = (statusRes && statusRes.ok && statusRes.data && statusRes.data.iface_backend) || null;
 		var container = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('NetBird') + ' — ' + _('Status'))
 		]);
+
+		var backendWarn = renderIfaceBackendWarning(ifaceBackend);
+		if (backendWarn)
+			container.appendChild(backendWarn);
 
 		// 非 running：空态引导（软件版本已移到「版本管理」标签页 versions.js），不轮询连接信息。
 		if (state !== 'running') {

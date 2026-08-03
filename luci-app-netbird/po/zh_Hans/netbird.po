@@ -563,6 +563,15 @@ msgstr "NetBird 日志的详细程度。"
 msgid "Caution:"
 msgstr "警告："
 
+msgid "WireGuard / TUN backend missing"
+msgstr "缺少 WireGuard / TUN 后端"
+
+msgid "NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device."
+msgstr "NetBird 需要内核 WireGuard 模块或 TUN 设备才能创建接口。本机两者都不可用。"
+
+msgid "Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again."
+msgstr "请安装 kmod-wireguard 或 kmod-tun（例如：%s install kmod-wireguard），然后重启或重新启动服务。"
+
 msgid "WireGuard interface name"
 msgstr "WireGuard 接口名"
 

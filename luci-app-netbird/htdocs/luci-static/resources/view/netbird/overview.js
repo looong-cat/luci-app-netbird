@@ -30,6 +30,22 @@ function pkgMgrName(pkgMgr) {
 	return (pkgMgr === 'apk') ? 'apk' : 'opkg';
 }
 
+// iface_backend.ready === false：后端高置信「内核 WG 与 TUN 都不可用」。
+// 旧后端无此字段时不渲染（兼容旧 rpcd）。
+function renderIfaceBackendWarning(ifaceBackend, pkgMgr) {
+	if (!ifaceBackend || ifaceBackend.ready !== false)
+		return null;
+	var mgr = pkgMgrName(pkgMgr);
+	return E('div', { 'class': 'alert-message warning' }, [
+		E('p', {}, [
+			E('strong', {}, _('WireGuard / TUN backend missing')),
+			E('br'),
+			_('NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device.')
+		]),
+		E('p', {}, _('Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again.').format(mgr))
+	]);
+}
+
 // 横幅视图模型：state 字面量 → { pill, label, hint }。
 // pill 取 dom-helpers.statusPill 白名单（connected/disconnected/error/
 // not_installed/service_disabled/unknown）；非白名单态降级 'unknown' 灰胶囊。
@@ -107,6 +123,7 @@ return view.extend({
 			var authRes = res[1];
 			var binRes = res[2];
 			var state = (statusRes && statusRes.ok && statusRes.data && statusRes.data.status) || 'unknown';
+			var ifaceBackend = (statusRes && statusRes.ok && statusRes.data && statusRes.data.iface_backend) || null;
 			var authData = (authRes && authRes.ok && authRes.data) ? authRes.data : {};
 			var binData = (binRes && binRes.ok && binRes.data) ? binRes.data : {};
 			var mgmtUrl = authData.management_url || '';
@@ -116,9 +133,9 @@ return view.extend({
 			// 仅 running 态拉 connection info 判 management.connected。
 			if (state === 'running')
 				return L.resolveDefault(callConnInfo(), { ok: false }).then(function (ci) {
-					return { state: state, connInfo: ci, mgmtUrl: mgmtUrl, keyHint: keyHint, lastAuthError: lastAuthError, pkgMgr: pkgMgr };
+					return { state: state, connInfo: ci, mgmtUrl: mgmtUrl, keyHint: keyHint, lastAuthError: lastAuthError, pkgMgr: pkgMgr, ifaceBackend: ifaceBackend };
 				});
-			return { state: state, connInfo: null, mgmtUrl: mgmtUrl, keyHint: keyHint, lastAuthError: lastAuthError, pkgMgr: pkgMgr };
+			return { state: state, connInfo: null, mgmtUrl: mgmtUrl, keyHint: keyHint, lastAuthError: lastAuthError, pkgMgr: pkgMgr, ifaceBackend: ifaceBackend };
 		});
 	},
 
@@ -395,6 +412,7 @@ return view.extend({
 		var keyHint = data.keyHint || '';
 		var lastAuthError = data.lastAuthError || '';
 		var pkgMgr = data.pkgMgr || '';
+		var ifaceBackend = data.ifaceBackend || null;
 		var connected = !!(data.connInfo && data.connInfo.ok && data.connInfo.data &&
 			data.connInfo.data.management && data.connInfo.data.management.connected);
 		var m = bannerModel(state, connected);
@@ -406,9 +424,12 @@ return view.extend({
 					nb.statusPill(m.pill, m.label),
 					E('span', { 'class': 'nb-banner-hint' }, ' ' + m.hint)
 				])
-			]),
-			this.renderGuidance(state, pkgMgr)
+			])
 		];
+		var backendWarn = renderIfaceBackendWarning(ifaceBackend, pkgMgr);
+		if (backendWarn)
+			children.push(backendWarn);
+		children.push(this.renderGuidance(state, pkgMgr));
 
 		// connected 时显示断开/注销控制；否则（且非 not_installed）显示认证表单。
 		if (connected)

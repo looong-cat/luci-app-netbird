@@ -1273,6 +1273,25 @@ msgstr ""
 msgid "Versions"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "WireGuard / TUN backend missing"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid ""
+"NetBird needs either the WireGuard kernel module or a TUN device to create "
+"its interface. Neither is available on this device."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid ""
+"Install package kmod-wireguard or kmod-tun (for example: %s install "
+"kmod-wireguard), then reboot or start the service again."
+msgstr ""
+
 #: htdocs/luci-static/resources/view/netbird/settings.js:92
 msgid "WireGuard interface name"
 msgstr ""
