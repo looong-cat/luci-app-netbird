@@ -15,6 +15,9 @@
 var callGetStatus   = rpc.declare({ object: 'luci.netbird', method: 'get_status' });
 var callConnInfo    = rpc.declare({ object: 'luci.netbird', method: 'get_connection_info' });
 var callListPeers   = rpc.declare({ object: 'luci.netbird', method: 'list_peers' });
+var callInstallIfaceBackend = rpc.declare({
+	object: 'luci.netbird', method: 'install_iface_backend', expect: {}
+});
 // 软件版本 / 二进制来源管理已移到「版本管理」标签页(versions.js)。
 
 var STATE_LABEL = {
@@ -174,18 +177,31 @@ function renderEmpty(state) {
 }
 
 // iface_backend.ready === false：高置信缺少内核 WireGuard 与 TUN。
-// 旧后端无该字段时跳过，保持向前/向后兼容。
-function renderIfaceBackendWarning(ifaceBackend) {
+// 旧后端无该字段时跳过，保持向前/向后兼容。onInstall 有则显示一键安装按钮。
+function renderIfaceBackendWarning(ifaceBackend, onInstall) {
 	if (!ifaceBackend || ifaceBackend.ready !== false)
 		return null;
-	return E('div', { 'class': 'alert-message warning' }, [
+	var kids = [
 		E('p', {}, [
 			E('strong', {}, _('WireGuard / TUN backend missing')),
 			E('br'),
 			_('NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device.')
-		]),
-		E('p', {}, _('Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again.').format('opkg'))
-	]);
+		])
+	];
+	if (onInstall) {
+		kids.push(E('p', {}, [
+			E('button', {
+				'class': 'btn cbi-button cbi-button-action',
+				'click': onInstall
+			}, _('Install WireGuard / TUN packages')),
+			' ',
+			E('span', { 'class': 'cbi-value-description' },
+				_('Installs the kernel packages required for NetBird interfaces. This may take a minute.'))
+		]));
+	}
+	kids.push(E('p', { 'class': 'cbi-value-description' },
+		_('Or install manually (for example: %s install kmod-wireguard), then reboot or start the service again.').format('opkg')));
+	return E('div', { 'class': 'alert-message warning' }, kids);
 }
 
 // L.Poll 节奏：running+connected 5s；running 但未连 30s；非 running 不轮询。
@@ -199,6 +215,67 @@ return view.extend({
 		return L.resolveDefault(callGetStatus(), { ok: false });
 	},
 
+	// LuCI rpc.js 只读 L.env.rpctimeout；装包可能超过默认 20s。
+	_withRpcTimeout: function (seconds, fn) {
+		var had = Object.prototype.hasOwnProperty.call(L.env, 'rpctimeout');
+		var old = L.env.rpctimeout;
+		L.env.rpctimeout = Math.max(Number(old) || 20, seconds);
+		return fn().then(function (res) {
+			if (had) L.env.rpctimeout = old;
+			else delete L.env.rpctimeout;
+			return res;
+		}, function (err) {
+			if (had) L.env.rpctimeout = old;
+			else delete L.env.rpctimeout;
+			throw err;
+		});
+	},
+
+	handleInstallIfaceBackend: function (ev) {
+		var self = this;
+		var btn = ev.currentTarget;
+		btn.classList.add('spinning');
+		btn.disabled = true;
+		ui.showModal(_('Installing WireGuard / TUN packages'), [
+			E('p', { 'class': 'spinning' },
+				_('Updating package lists and installing kernel modules…'))
+		]);
+		return L.resolveDefault(self._withRpcTimeout(180, function () {
+			return callInstallIfaceBackend();
+		}), { ok: false }).then(function (res) {
+			ui.hideModal();
+			if (res && res.ok && res.data && res.data.iface_backend &&
+				res.data.iface_backend.ready === true) {
+				ui.addNotification(null, E('p', {},
+					_('WireGuard / TUN packages installed. Reloading…')), 'info');
+				window.setTimeout(function () { location.reload(); }, 800);
+				return;
+			}
+			var msg = (res && res.message) ? _(res.message) : _('Failed to install WireGuard / TUN packages.');
+			var body = [ E('p', {}, msg) ];
+			if (res && res.hint)
+				body.push(E('p', { 'class': 'cbi-value-description' }, _('Hint:') + ' ' + _(res.hint)));
+			if (res && res.message)
+				body.push(E('pre', {
+					'style': 'white-space:pre-wrap;word-break:break-word;max-height:16em;overflow:auto'
+				}, String(res.message)));
+			body.push(E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Close'))
+			]));
+			ui.showModal(_('Install failed'), body);
+			btn.classList.remove('spinning');
+			btn.disabled = false;
+		}, function (e) {
+			ui.hideModal();
+			var em = String(e && e.message ? e.message : e);
+			if (/XHR request timed out/i.test(em))
+				em = _('The NetBird operation is still running or took too long. Check the Logs tab, then try again.');
+			ui.addNotification(null, E('p', {}, em), 'error');
+			btn.classList.remove('spinning');
+			btn.disabled = false;
+		});
+	},
+
 	render: function (statusRes) {
 		var state = (statusRes && statusRes.ok && statusRes.data && statusRes.data.status) || 'unknown';
 		var ifaceBackend = (statusRes && statusRes.ok && statusRes.data && statusRes.data.iface_backend) || null;
@@ -206,7 +283,8 @@ return view.extend({
 			E('h2', {}, _('NetBird') + ' — ' + _('Status'))
 		]);
 
-		var backendWarn = renderIfaceBackendWarning(ifaceBackend);
+		var backendWarn = renderIfaceBackendWarning(ifaceBackend,
+			ui.createHandlerFn(this, 'handleInstallIfaceBackend'));
 		if (backendWarn)
 			container.appendChild(backendWarn);
 

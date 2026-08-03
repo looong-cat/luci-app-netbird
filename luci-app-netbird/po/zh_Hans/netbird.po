@@ -569,8 +569,32 @@ msgstr "缺少 WireGuard / TUN 后端"
 msgid "NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device."
 msgstr "NetBird 需要内核 WireGuard 模块或 TUN 设备才能创建接口。本机两者都不可用。"
 
-msgid "Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again."
-msgstr "请安装 kmod-wireguard 或 kmod-tun（例如：%s install kmod-wireguard），然后重启或重新启动服务。"
+msgid "Install WireGuard / TUN packages"
+msgstr "安装 WireGuard / TUN 软件包"
+
+msgid "Installs the kernel packages required for NetBird interfaces. This may take a minute."
+msgstr "安装 NetBird 创建接口所需的内核软件包，可能需要一分钟。"
+
+msgid "Or install manually (for example: %s install kmod-wireguard), then reboot or start the service again."
+msgstr "或手动安装（例如：%s install kmod-wireguard），然后重启或重新启动服务。"
+
+msgid "Installing WireGuard / TUN packages"
+msgstr "正在安装 WireGuard / TUN 软件包"
+
+msgid "Updating package lists and installing kernel modules…"
+msgstr "正在更新软件源并安装内核模块…"
+
+msgid "WireGuard / TUN packages installed. Reloading…"
+msgstr "WireGuard / TUN 软件包已安装，正在刷新…"
+
+msgid "Failed to install WireGuard / TUN packages."
+msgstr "安装 WireGuard / TUN 软件包失败。"
+
+msgid "Install failed"
+msgstr "安装失败"
+
+msgid "Close"
+msgstr "关闭"
 
 msgid "WireGuard interface name"
 msgstr "WireGuard 接口名"

@@ -25,25 +25,41 @@ var callDoLogout    = rpc.declare({ object: 'luci.netbird', method: 'do_logout',
 	params: [ 'local_only' ] });
 var callBinaryInfo  = rpc.declare({ object: 'luci.netbird', method: 'get_binary_info',
 	params: [ 'check_remote' ], expect: {} });
+var callInstallIfaceBackend = rpc.declare({
+	object: 'luci.netbird', method: 'install_iface_backend', expect: {}
+});
 
 function pkgMgrName(pkgMgr) {
 	return (pkgMgr === 'apk') ? 'apk' : 'opkg';
 }
 
 // iface_backend.ready === false：后端高置信「内核 WG 与 TUN 都不可用」。
-// 旧后端无此字段时不渲染（兼容旧 rpcd）。
-function renderIfaceBackendWarning(ifaceBackend, pkgMgr) {
+// 旧后端无此字段时不渲染（兼容旧 rpcd）。onInstall 有则显示一键安装按钮。
+function renderIfaceBackendWarning(ifaceBackend, pkgMgr, onInstall) {
 	if (!ifaceBackend || ifaceBackend.ready !== false)
 		return null;
 	var mgr = pkgMgrName(pkgMgr);
-	return E('div', { 'class': 'alert-message warning' }, [
+	var kids = [
 		E('p', {}, [
 			E('strong', {}, _('WireGuard / TUN backend missing')),
 			E('br'),
 			_('NetBird needs either the WireGuard kernel module or a TUN device to create its interface. Neither is available on this device.')
-		]),
-		E('p', {}, _('Install package kmod-wireguard or kmod-tun (for example: %s install kmod-wireguard), then reboot or start the service again.').format(mgr))
-	]);
+		])
+	];
+	if (onInstall) {
+		kids.push(E('p', {}, [
+			E('button', {
+				'class': 'btn cbi-button cbi-button-action',
+				'click': onInstall
+			}, _('Install WireGuard / TUN packages')),
+			' ',
+			E('span', { 'class': 'cbi-value-description' },
+				_('Installs the kernel packages required for NetBird interfaces. This may take a minute.'))
+		]));
+	}
+	kids.push(E('p', { 'class': 'cbi-value-description' },
+		_('Or install manually (for example: %s install kmod-wireguard), then reboot or start the service again.').format(mgr)));
+	return E('div', { 'class': 'alert-message warning' }, kids);
 }
 
 // 横幅视图模型：state 字面量 → { pill, label, hint }。
@@ -161,6 +177,50 @@ return view.extend({
 	handleEnableStart: function (ev) {
 		return runAction(ev.currentTarget, callEnableStart(),
 			_('NetBird service enabled and started.'), _('Operation failed.'));
+	},
+
+	// 一键安装 WireGuard/TUN kmod：仅告警可见时渲染；后端再闸 ready。
+	// 包管理可能较慢（update+install），临时抬高 rpctimeout；失败弹窗展示真实 message/hint。
+	handleInstallIfaceBackend: function (ev) {
+		var self = this;
+		var btn = ev.currentTarget;
+		btn.classList.add('spinning');
+		btn.disabled = true;
+		ui.showModal(_('Installing WireGuard / TUN packages'), [
+			E('p', { 'class': 'spinning' },
+				_('Updating package lists and installing kernel modules…'))
+		]);
+		return L.resolveDefault(self._withRpcTimeout(180, function () {
+			return callInstallIfaceBackend();
+		}), { ok: false }).then(function (res) {
+			ui.hideModal();
+			if (res && res.ok && res.data && res.data.iface_backend &&
+				res.data.iface_backend.ready === true) {
+				ui.addNotification(null, E('p', {},
+					_('WireGuard / TUN packages installed. Reloading…')), 'info');
+				window.setTimeout(function () { location.reload(); }, 800);
+				return;
+			}
+			var body = [
+				E('p', {}, responseMessage(res,
+					_('Failed to install WireGuard / TUN packages.')))
+			];
+			if (res && res.message)
+				body.push(E('pre', {
+					'style': 'white-space:pre-wrap;word-break:break-word;max-height:16em;overflow:auto'
+				}, String(res.message)));
+			body.push(E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Close'))
+			]));
+			ui.showModal(_('Install failed'), body);
+			btn.classList.remove('spinning');
+			btn.disabled = false;
+		}, function (e) {
+			ui.hideModal();
+			ui.addNotification(null, E('p', {}, exceptionMessage(e)), 'error');
+			btn.classList.remove('spinning');
+			btn.disabled = false;
+		});
 	},
 
 	// 「连接」回调：读输入框值 → do_up({management_url, setup_key})。
@@ -426,7 +486,8 @@ return view.extend({
 				])
 			])
 		];
-		var backendWarn = renderIfaceBackendWarning(ifaceBackend, pkgMgr);
+		var backendWarn = renderIfaceBackendWarning(ifaceBackend, pkgMgr,
+			ui.createHandlerFn(this, 'handleInstallIfaceBackend'));
 		if (backendWarn)
 			children.push(backendWarn);
 		children.push(this.renderGuidance(state, pkgMgr));

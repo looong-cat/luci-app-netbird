@@ -293,4 +293,4 @@ function probe_state() {
     return st;
 }
 
-return { probe_state };
+return { probe_state, probe_iface_backend };

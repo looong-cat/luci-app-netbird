@@ -1287,9 +1287,51 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/netbird/overview.js
 #: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Install WireGuard / TUN packages"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
 msgid ""
-"Install package kmod-wireguard or kmod-tun (for example: %s install "
-"kmod-wireguard), then reboot or start the service again."
+"Installs the kernel packages required for NetBird interfaces. This may take "
+"a minute."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid ""
+"Or install manually (for example: %s install kmod-wireguard), then reboot or "
+"start the service again."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Installing WireGuard / TUN packages"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Updating package lists and installing kernel modules…"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "WireGuard / TUN packages installed. Reloading…"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Failed to install WireGuard / TUN packages."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Install failed"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/netbird/overview.js
+#: htdocs/luci-static/resources/view/netbird/status.js
+msgid "Close"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/netbird/settings.js:92

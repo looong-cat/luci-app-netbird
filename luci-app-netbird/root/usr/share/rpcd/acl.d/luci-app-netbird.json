@@ -38,6 +38,7 @@
 					"set_binary_source",
 					"delete_custom_binary",
 					"update_luci_app",
+					"install_iface_backend",
 					"select_exit_node"
 				]
 			},

@@ -3,7 +3,7 @@
 // Canonical runtime path: /usr/share/rpcd/ucode/netbird.uc
 // Repo canonical source:  root/usr/share/rpcd/ucode/netbird.uc
 //
-// netbird.uc — rpcd 入口对象（注册 luci.netbird，28 methods = 13 read + 15 write）
+// netbird.uc — rpcd 入口对象（注册 luci.netbird，29 methods = 13 read + 16 write）
 // ACL 合约源：root/usr/share/rpcd/acl.d/luci-app-netbird.json
 // 方法名必须与 ACL 一字不差（双向 diff 是 CI 闸门）。
 //
@@ -42,6 +42,7 @@ let err                  = _envelope.err;
 let CODE                 = _envelope.CODE;
 let sanitize_settings    = _sanitize.sanitize_settings;
 let probe_state          = _state.probe_state;
+let probe_iface_backend  = _state.probe_iface_backend;
 let fetch_status_json    = _cli.fetch_status_json;
 let get_opkg_versions    = _cli.get_opkg_versions;
 let probe_running_via_ubus = _cli.probe_running_via_ubus;
@@ -2513,6 +2514,165 @@ function _ensure_configured_binary() {
     _do_set_binary_source({ source: 'release' });     // 切到 release(失败也不阻断;daemon 仍可连)
 }
 
+// ============================================================================
+// install_iface_backend — 一键安装 WireGuard / TUN 内核后端
+// ============================================================================
+// 前端仅在 get_status.iface_backend.ready === false（高置信双缺）时显示按钮。
+// 后端同样以 ready 为闸：已 ready 则幂等 no-op，避免健康机多此一举。
+// 装什么由后端决定（绝不让前端硬编码包名）：
+//   1) 优先 kmod-wireguard（NetBird 首选内核 WG 路径）
+//   2) WG 装失败或装完复验仍缺 → 再试 kmod-tun（userspace wireguard-go 路径）
+// 绝不触碰 netbird 包本身（remove / --force-reinstall / apk fix 红线）。
+// 失败时原样截断回传包管理器输出，并按内核哈希失配 / 网络 / 源 分类 message+hint。
+
+const _IFACE_INSTALL_LOCK = '/tmp/nb-iface-backend-install.lock';
+
+// _classify_pkg_install_error(raw) → { message, hint }
+// 把 opkg/apk 原始输出分成可行动类别；raw 始终由调用方另附，本函数只产摘要。
+function _classify_pkg_install_error(raw) {
+    let t = lc(raw || '');
+    // 内核哈希锁定：kmod 依赖 kernel (= <ver>-<hash>)，厂商自编内核必然对不上。
+    if (match(t, /satisfy_dependencies|cannot satisfy|unsatisfiable|broken packages|kernel\s*\(=\s*|depends on kernel|has no candidates for|conflicts with kernel/))
+        return {
+            message: 'Package install failed: kernel modules from the package feeds do not match this device kernel (common on vendor firmware with a custom kernel).',
+            hint: 'Use kmod packages that match your running kernel (vendor firmware image), or flash stock OpenWrt/ImmortalWrt whose kernel matches the configured feeds.'
+        };
+    if (match(t, /failed to download|download failed|wget returned|network is unreachable|temporary failure resolving|connection refused|connection timed out|ssl[_\s]?error|could not resolve|no route to host|apk.*error.*fetch|unreachable/))
+        return {
+            message: 'Package install failed: could not reach the package feeds (network or DNS).',
+            hint: 'Check WAN/DNS connectivity, then retry. You may need to run the package manager update manually first.'
+        };
+    if (match(t, /unknown package|no such package|has no candidates|not found in|package not found|error 404|404 not found/))
+        return {
+            message: 'Package install failed: the required package is not available in the configured feeds.',
+            hint: 'Check /etc/opkg/distfeeds.conf or apk repositories, run a package list update, and ensure the release matches this image.'
+        };
+    if (match(t, /lock|locked|another instance|could not lock|failed to lock/))
+        return {
+            message: 'Package install failed: another package manager instance is already running.',
+            hint: 'Wait for the other install/update to finish, then try again.'
+        };
+    return {
+        message: 'Package install failed.',
+        hint: 'See the package manager output below for the exact error.'
+    };
+}
+
+// _pkg_install_exact(name) → { code, out, cmd }：精确包名安装（禁 glob）；复用 _pkg_mgr 分流。
+// name 仅允许 [A-Za-z0-9._+-]，防注入；输出截到 2KiB。
+function _pkg_install_exact(name) {
+    if (!match(name || '', /^[A-Za-z0-9._+-]+$/))
+        return { code: -1, out: 'refusing invalid package name', cmd: '' };
+    let mgr = _pkg_mgr();
+    let cmd;
+    if (mgr == 'apk')
+        cmd = 'apk add --allow-untrusted ' + name + ' 2>&1';
+    else
+        cmd = 'opkg install ' + name + ' 2>&1';
+    let r = _popen_simple(cmd); // shell-audit-ok: name 经严格白名单校验
+    return { code: r.code, out: substr(r.out || '', 0, 2048), cmd: cmd };
+}
+
+// _pkg_update_lists() → { code, out }：刷新索引；失败不阻断后续 install（可能本地缓存仍可用）。
+function _pkg_update_lists() {
+    let cmd = (_pkg_mgr() == 'apk') ? 'apk update 2>&1' : 'opkg update 2>&1';
+    let r = _popen_simple(cmd); // shell-audit-ok: 纯字面常量
+    return { code: r.code, out: substr(r.out || '', 0, 1024) };
+}
+
+// _iface_install_lock() → true 拿到锁 / false 已有并发安装。
+function _iface_install_lock() {
+    // mkdir 原子占位；成功=拿到锁。
+    let r = _popen_simple('mkdir ' + shell_quote(_IFACE_INSTALL_LOCK) + ' 2>/dev/null');
+    return r.code == 0;
+}
+
+function _iface_install_unlock() {
+    _popen_simple('rmdir ' + shell_quote(_IFACE_INSTALL_LOCK) + ' 2>/dev/null');
+}
+
+// _do_install_iface_backend() — 写方法主体。
+// 注意：不用 try/finally（22.03 ucode 无 finally）；所有 return 前显式 unlock。
+function _do_install_iface_backend(req) {
+    let before = probe_iface_backend();
+    let mgr = _pkg_mgr();
+
+    // 幂等：已有 WG 或 TUN 正证据 → 不跑包管理器。
+    if (before.ready) {
+        return ok({
+            already: true,
+            packages: [],
+            pkg_mgr: mgr,
+            iface_backend: before,
+            output: ''
+        });
+    }
+
+    if (!_iface_install_lock()) {
+        return err(CODE.INSTALL_FAILED,
+            'Another WireGuard/TUN package install is already in progress.',
+            'Wait for it to finish, then retry if the warning is still shown.');
+    }
+
+    let installed = [];
+    let outputs = [];
+    let last_fail = null;
+
+    // 刷新软件源索引（失败只记日志，仍尝试 install——缓存可能够用）。
+    let upd = _pkg_update_lists();
+    if (length(upd.out) > 0)
+        push(outputs, 'update:\n' + upd.out);
+
+    // 优先内核 WireGuard；NetBird 主路径。
+    let wg = _pkg_install_exact('kmod-wireguard');
+    push(outputs, wg.cmd + '\n' + wg.out);
+    if (wg.code == 0)
+        push(installed, 'kmod-wireguard');
+    else
+        last_fail = wg;
+
+    let mid = probe_iface_backend();
+    // WG 已就绪则不必再动 TUN；否则退而装 kmod-tun（userspace 路径）。
+    if (!mid.ready) {
+        let tun = _pkg_install_exact('kmod-tun');
+        push(outputs, tun.cmd + '\n' + tun.out);
+        if (tun.code == 0)
+            push(installed, 'kmod-tun');
+        else if (last_fail == null || wg.code == 0)
+            last_fail = tun;
+    }
+
+    let after = probe_iface_backend();
+    let raw = substr(join('\n---\n', outputs), 0, 2400);
+
+    if (after.ready) {
+        _iface_install_unlock();
+        return ok({
+            already: false,
+            packages: installed,
+            pkg_mgr: mgr,
+            iface_backend: after,
+            output: raw
+        });
+    }
+
+    // 包管理器都失败，或装上了但复验仍双缺（错版本 kmod / 需重启等）。
+    if (length(installed) == 0 && last_fail != null) {
+        let cls = _classify_pkg_install_error(last_fail.out);
+        _iface_install_unlock();
+        return err(CODE.INSTALL_FAILED,
+            cls.message + ' Output: ' + substr(trim(last_fail.out), 0, 900),
+            cls.hint);
+    }
+
+    let pkgs_txt = (length(installed) > 0) ? join(', ', installed) : '(none)';
+    _iface_install_unlock();
+    return err(CODE.INSTALL_FAILED,
+        'Packages were processed but WireGuard/TUN is still unavailable after re-probe. Installed: ' +
+        pkgs_txt + '. Output: ' + substr(trim(raw), 0, 900),
+        'If packages installed successfully, reboot the device and check again. Vendor kernels may still lack a matching module.');
+}
+
 return {
     'luci.netbird': {
         // ==== 13 read ====（ACL read.ubus.luci.netbird 对齐）
@@ -2738,7 +2898,7 @@ return {
             call: _safe(_do_check_luci_app_update),
         },
 
-        // ==== 15 write ====（ACL write.ubus.luci.netbird 对齐）— zone 设备直绑设计已移除 setup_network
+        // ==== 16 write ====（ACL write.ubus.luci.netbird 对齐）— zone 设备直绑设计已移除 setup_network
 
         // do_up — 连接（拉起 WireGuard + 连管理端 + 建 P2P）。
         // args { management_url, setup_key } 均瞬时（setup_key 绝不入 UCI/backup）。
@@ -3053,6 +3213,10 @@ return {
         // update_luci_app — 从 luci-app-netbird.okk.sh 对应 OpenWrt 系列目录下载并安装 LuCI 包。
         // ACL: 方法名已加入 write.ubus.luci.netbird（一字不差）。
         update_luci_app:       { args: {}, call: _safe(_do_update_luci_app) },
+
+        // install_iface_backend — 高置信缺 WG+TUN 时一键装 kmod-wireguard（优先）/ kmod-tun。
+        // 装完复验 probe_iface_backend；失败原样回传包管理器输出。ACL: write 段已同步。
+        install_iface_backend: { args: {}, call: _safe(_do_install_iface_backend) },
 
         // select_exit_node — 切换/关闭 exit node。args.id：目标 exit node ID，'' = 关闭。
         // 流程：白名单校验（目标必须在当前 list 的 exit node 集内，任意字符串到不了 CLI）
