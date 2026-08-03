@@ -20,7 +20,7 @@
 // module-compat：作为 ucode 模块经 loadfile()() 加载，返回 { probe_state }。
 // 依赖 paths/netbird_cli/shell 也走 loadfile，路径 NBLIB env override。
 
-import { popen, access, open } from 'fs';
+import { popen, access, open, lsdir } from 'fs';
 
 const _LIB = getenv('NBLIB') || '/usr/share/rpcd/ucode/lib';
 let _paths = loadfile(_LIB + '/paths.uc')();
@@ -34,6 +34,10 @@ let shell_quote = _shell.shell_quote;
 // _HAS_TIMEOUT：BusyBox 1.36.1 默认未携带 timeout applet；
 // 缺失时降级为透传命令；保留字面 "timeout 5s" 标明超时(5s)设计。
 const _HAS_TIMEOUT = access('/usr/bin/timeout', 'x') || access('/bin/timeout', 'x');
+
+// OpenWrt 把 .ko 平铺在 /lib/modules/<ver>/；一棵树通常几十个条目。
+// lsdir 上限防止异常目录把 get_status 热路径拖垮。
+const _MOD_LSDIR_CAP = 256;
 
 function _t(cmd) {
     if (_HAS_TIMEOUT)
@@ -56,7 +60,7 @@ function _read_small(path, max_bytes) {
 }
 
 // 在 modules root 下按常见相对目录探测 name.ko（含常见压缩后缀）。
-// 不 walk 整树：netbird 自己会 lazy-load，我们只需「.ko 是否在磁盘上」的廉价证据。
+// 不 walk 整树：OpenWrt 平铺用 rel ''；嵌套发行版用固定子路径。
 function _ko_present(root, name, rel_dirs) {
     let suffixes = [ '.ko', '.ko.gz', '.ko.xz', '.ko.zst' ];
     for (let d in rel_dirs) {
@@ -69,11 +73,10 @@ function _ko_present(root, name, rel_dirs) {
 }
 
 // modules.dep / modules.builtin 文本里是否出现「路径末端的 name.ko」
-// （避免把名字当子串误匹配）。
+// （若存在则采信；OpenWrt 官方 rootfs 通常没有这些索引文件）。
 function _mod_inventory_has(text, name) {
     if (text == null || length(text) == 0)
         return false;
-    // e.g. kernel/drivers/net/wireguard/wireguard.ko:  or  .../tun.ko
     return match(text, regexp('(^|/)(' + name + ')\\.ko')) != null;
 }
 
@@ -84,14 +87,43 @@ function _proc_modules_has(text, name) {
     return match(text, regexp('(^|\n)' + name + '[\t ]')) != null;
 }
 
+// 扫描 /lib/modules/<krel>/ 顶层：是否至少有一个 .ko（树可信），以及平铺的 wireguard/tun。
+// OpenWrt 不用 depmod：.ko 平铺在此目录，无 modules.dep / modules.builtin。
+// 返回 { tree_ok, wg, tun }；目录不可读 → tree_ok=false（调用方沉默）。
+function _scan_flat_modules(root) {
+    let entries = lsdir(root);
+    if (entries == null)
+        return { tree_ok: false, wg: false, tun: false };
+
+    let tree_ok = false;
+    let wg = false;
+    let tun = false;
+    let n = 0;
+    for (let ent in entries) {
+        n++;
+        if (n > _MOD_LSDIR_CAP)
+            break;
+        if (!tree_ok && match(ent, /\.ko(\.(gz|xz|zst))?$/))
+            tree_ok = true;
+        if (!wg && match(ent, /^wireguard\.ko(\.(gz|xz|zst))?$/))
+            wg = true;
+        if (!tun && match(ent, /^tun\.ko(\.(gz|xz|zst))?$/))
+            tun = true;
+        if (tree_ok && wg && tun)
+            break;
+    }
+    return { tree_ok: tree_ok, wg: wg, tun: tun };
+}
+
 // ============================================================================
 // probe_iface_backend() —— 只读、无副作用的 WireGuard / TUN 能力探测
 // ============================================================================
 // 与 netbird client/iface 选择逻辑对齐（kernel WG → wireguard-go+TUN），但：
 //   - 绝不 modprobe/insmod/netlink 建链（get_status 被轮询，且误报代价高）
-//   - 「当前未加载」≠「不可用」：磁盘上有 .ko / modules.dep 条目即可被 netbird lazy-load
-//   - 「无 .ko、无 /sys/module」可能是把 WG 编进内核的固件 → 必须能读到
-//     modules.builtin 并确认未列出，才敢宣称缺失；否则 ready 保持 true（沉默）
+//   - 「当前未加载」≠「不可用」：磁盘上有 .ko 即可被 netbird lazy-load
+//   - 高置信「双缺」的依据是「当前内核的模块树存在且至少有一个 .ko，
+//     但树内找不到 wireguard/tun 正证据」——对齐 OpenWrt 平铺 .ko、无 modules.* 索引
+//   - 按 osrelease 锚不到模块树时沉默（容器 host 内核与 rootfs 失配常见；真机一致）
 //
 // 返回 { ready, wireguard, tun }：
 //   ready=false → 高置信两者皆不可用，前端可提示装 kmod-wireguard / kmod-tun
@@ -101,6 +133,8 @@ function probe_iface_backend() {
     let tun = false;
 
     // --- 快路径：已加载 / 已有设备节点（各一次 access，最常见健康机直接返回）---
+    // 内建 CONFIG_WIREGUARD=y：上游 WireGuard 带 MODULE_VERSION，内核
+    // version_sysfs_builtin() 会创建 /sys/module/wireguard（即使无 module_param）。
     if (access('/sys/module/wireguard', 'r') || access('/sys/module/wireguard', 'f'))
         wg = true;
     if (access('/dev/net/tun', 'r') || access('/dev/net/tun', 'f'))
@@ -120,27 +154,30 @@ function probe_iface_backend() {
     if (wg || tun)
         return { ready: true, wireguard: wg, tun: tun };
 
-    // --- 内核模块目录：.ko / modules.dep / modules.builtin ---
-    // 用 osrelease 文件避免再起 uname 子进程。
+    // --- 当前内核模块树（osrelease 锚定；真机与 /lib/modules/<ver> 一致）---
     let krel = trim(_read_small('/proc/sys/kernel/osrelease', 256) || '');
     if (length(krel) == 0)
-        return { ready: true, wireguard: false, tun: false };  // 无法锚定 modules 树 → 沉默
-
-    let root = '/lib/modules/' + krel;
-    let builtin = _read_small(root + '/modules.builtin', 262144);
-    let dep = _read_small(root + '/modules.dep', 1048576);
-
-    // 两份清单都读不到：可能是静态内核 / 容器 host 内核与 rootfs 不匹配。
-    // 此时不能区分「编进内核」与「真的没有」→ 沉默。
-    if (builtin == null && dep == null)
         return { ready: true, wireguard: false, tun: false };
 
+    let root = '/lib/modules/' + krel;
+
+    // 平铺扫描（OpenWrt 主路径）：有任意 .ko → 树可信；并识别 wireguard.ko / tun.ko。
+    let flat = _scan_flat_modules(root);
+
+    // 若存在 modules.* 索引则采信（非 OpenWrt 或自定义 rootfs）。
+    let builtin = _read_small(root + '/modules.builtin', 262144);
+    let dep = _read_small(root + '/modules.dep', 1048576);
     if (_mod_inventory_has(builtin, 'wireguard') || _mod_inventory_has(dep, 'wireguard'))
         wg = true;
     if (_mod_inventory_has(builtin, 'tun') || _mod_inventory_has(dep, 'tun'))
         tun = true;
 
-    // modules.dep 未跑 depmod 时的常见路径兜底（仍只 access，不 walk）。
+    if (flat.wg)
+        wg = true;
+    if (flat.tun)
+        tun = true;
+
+    // 嵌套路径兜底（非 OpenWrt 布局 / 未平铺时）；仍只 access，不 walk。
     if (!wg)
         wg = _ko_present(root, 'wireguard', [ '', 'kernel/drivers/net/wireguard/', 'updates/' ]);
     if (!tun)
@@ -149,9 +186,10 @@ function probe_iface_backend() {
     if (wg || tun)
         return { ready: true, wireguard: wg, tun: tun };
 
-    // 高置信「双缺」：必须能读 modules.builtin，才能排除「WG=y 编进内核、无 .ko」的误报。
-    // 仅有 modules.dep 时 built-in 不会出现在 dep 里 → 仍沉默。
-    if (builtin == null)
+    // 高置信「双缺」：当前 osrelease 对应模块树可读，且顶层至少有一个 .ko
+    // （证明这是在用的 kmod 树，而不是空目录/失配路径），同时无任何 WG/TUN 正证据。
+    // 锚不到树（容器 host 内核 vs rootfs 模块目录名不一致）→ tree_ok=false → 沉默。
+    if (!flat.tree_ok)
         return { ready: true, wireguard: false, tun: false };
 
     return { ready: false, wireguard: false, tun: false };
