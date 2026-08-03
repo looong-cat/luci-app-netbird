@@ -7,7 +7,7 @@
 [English](README.md) | **简体中文**
 
 OpenWrt / ImmortalWrt 上管理 [NetBird](https://netbird.io) mesh-VPN 客户端的 LuCI 应用 —— 在路由器上使用 NetBird，无需命令行。
-同时兼容 OpenWrt / ImmortalWrt 23.05 / 24.x（`opkg`）和 25.x / 最新 snapshot（`apk`）。
+同时兼容 OpenWrt / ImmortalWrt 22.03 / 23.05 / 24.x（`opkg`）和 25.x / 最新 snapshot（`apk`）。
 
 ## 功能
 
@@ -48,7 +48,7 @@ opkg install luci-app-netbird luci-i18n-netbird-zh-cn
 运行依赖(通常已随固件存在):`rpcd`、`rpcd-mod-ucode`、`luci-base`、`netbird`、`conntrack`。
 
 ```sh
-# OpenWrt / ImmortalWrt 23.05 / 24.10(opkg)
+# OpenWrt / ImmortalWrt 22.03 / 23.05 / 24.10(opkg)
 opkg install rpcd rpcd-mod-ucode luci-base netbird
 opkg install luci-app-netbird_*.ipk luci-i18n-netbird-zh-cn_*.ipk
 # OpenWrt / ImmortalWrt 25+(apk)
@@ -80,7 +80,8 @@ apk add --allow-untrusted luci-app-netbird-*.apk luci-i18n-netbird-zh-cn-*.apk
 
 - 已在 x86_64 验证；其他架构（arm64 / 386 / armv6）支持但测试较少。
 - SSH 扩展（Root 登录 / SFTP / 端口转发）需 netbird 0.72.x+。
-- OpenWrt 23.05 官方源的 netbird 较旧（0.24.x）：连接 / 状态 / 设置可用，但 exit node 选择需 netbird 0.35+ —— 安装后请在「**版本**」页把二进制切换到最新官方 release。
+- 较旧官方源的 netbird 版本偏低——23.05 是 0.24.x，22.03 是 0.17.x：连接 / 状态 / 设置可用，但 exit node 选择需 netbird 0.35+ —— 安装后请在「**版本**」页把二进制切换到最新官方 release。22.03 上尤其建议切换。
+- NetBird 需要内核 WireGuard 模块或 TUN 设备。官方 OpenWrt 镜像默认既不带 `kmod-wireguard` 也不带 `kmod-tun`，而 `netbird` 包本身并不依赖它们。若 NetBird 启动失败并提示 `tun module not available`，装其一即可：`opkg install kmod-wireguard`（推荐）或 `opkg install kmod-tun`。
 - `/etc/config/netbird` 是 conffile —— 升级保留你的设置。
 
 ## 许可

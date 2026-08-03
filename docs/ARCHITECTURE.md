@@ -109,10 +109,13 @@ Backend methods:
 - `update_luci_app` (write) — re-checks, downloads the package files into `/tmp/nb-luci-update*`,
   installs them, and cleans the temporary directory on success or failure.
 
-Feed selection is by OpenWrt release series:
+Feed selection is by OpenWrt release series. 22.03 is the oldest supported series: it is the first
+one shipping `ucode` and `rpcd-mod-ucode`, which the whole backend is written in. 21.02 and older
+ship neither, so the backend cannot run there at all and `feed.sh` rejects them.
 
 | OpenWrt series | Package manager | Feed | Package filename |
 |---|---|---|---|
+| 22.03 | `opkg` | `https://luci-app-netbird.okk.sh/openwrt-24.10/all/netbird/` (shares the 24.10 feed — the package is `PKGARCH:=all`) | `luci-app-netbird_<ver>_all.ipk` |
 | 23.05 | `opkg` | `https://luci-app-netbird.okk.sh/openwrt-24.10/all/netbird/` (shares the 24.10 feed — the package is `PKGARCH:=all`) | `luci-app-netbird_<ver>_all.ipk` |
 | 24.10 | `opkg` | `https://luci-app-netbird.okk.sh/openwrt-24.10/all/netbird/` | `luci-app-netbird_<ver>_all.ipk` |
 | 25.12 | `apk` | `https://luci-app-netbird.okk.sh/openwrt-25.12/all/netbird/` | `luci-app-netbird-<ver>.apk` |
