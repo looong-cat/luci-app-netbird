@@ -3,7 +3,11 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.1.0-r14 — 2026-08-04
+## 0.1.0-r15 — 2026-08-05
+
+### Fixed
+
+- Devices no longer lose their self-hosted management server after a reboot (#7). On firmwares whose `netbird` package starts the daemon without pinning a config path (the 23.05 feed's netbird 0.24.x — as shipped on GL.iNet firmware 4.x, among others), the 0.7x binary keeps its live config under `/var/lib/netbird`, which sits in RAM on OpenWrt. Every boot re-seeds that config from the stale `/etc/netbird/config.json` the old package wrote on its very first start, resurrecting the long-dead `api.wiretrustee.com` default; a plain reconnect could not push the correct URL into the daemon while it was busy retrying the dead endpoint, so only a manual disable/enable cycle in LuCI helped. The backend now detects that the daemon is running with a management URL different from the configured one and takes the connection down first, which unblocks the re-apply — the automatic-reconnect watchdog then heals a freshly booted router on its own, typically within a minute. Applies whenever a management URL is set in the app; the identity is untouched, so no setup key is needed again. Note: the updated backend loads when rpcd restarts — after upgrading, simply reboot the router once (or run `/etc/init.d/rpcd restart`).
 
 ### Added
 
