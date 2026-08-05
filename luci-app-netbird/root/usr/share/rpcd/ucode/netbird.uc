@@ -188,6 +188,31 @@ function _persist_mgmt_url(url) {
     c.commit('netbird');
 }
 
+// _norm_mgmt_url(u) → 管理 URL 归一化（仅比较用）：小写、去尾斜杠、无端口时补 scheme
+// 默认端口（https→443 / http→80），使「带/不带默认端口」两种写法等值。非常规形态
+// （带路径等）在小写、去尾斜杠后原样返回，比较退化为字符串相等，不会误判分叉。
+function _norm_mgmt_url(u) {
+    let s = lc(trim(u));
+    while (length(s) > 1 && substr(s, length(s) - 1) == '/')
+        s = substr(s, 0, length(s) - 1);
+    let m = match(s, /^(https?):\/\/([^\/:]+)$/);
+    if (m != null)
+        return m[1] + '://' + m[2] + ':' + ((m[1] == 'https') ? '443' : '80');
+    return s;
+}
+
+// _daemon_mgmt_url(bin) → daemon 当前持有的 management URL | null（status 非 JSON 态、
+// daemon 未运行、字段缺失）。status --json 的 management.url 是 daemon 当前配置的实时
+// 投影：status 请求处理时都会以持有配置刷新该字段，断连时不清空，故连不上管理端的
+// 故障态下依然可读。
+function _daemon_mgmt_url(bin) {
+    let js = fetch_status_json(bin);
+    if (!js.ok || js.data == null || js.data.management == null)
+        return null;
+    let u = js.data.management.url;
+    return (type(u) == 'string' && length(u) > 0) ? u : null;
+}
+
 // ============================================================================
 // 改动 2：管理 URL 展示来源 + Setup Key 打码 hint
 // ============================================================================
@@ -2932,6 +2957,20 @@ return {
                 let bin = resolve_netbird_bin();
                 if (bin == null)
                     return err(CODE.NOT_INSTALLED, 'The netbird binary is not installed.');
+
+                // 分叉自愈：daemon 持有的 management URL 与本次期望不一致时，up 前先 down。
+                // daemon 启动时可能从磁盘读入过期/默认 ManagementURL（如旧版本包写下的遗留
+                // 默认值，或配置目录落在 tmpfs、重启后被持久的旧文件重新播种），随后
+                // auto-connect 引擎对旧地址持续重试；引擎忙时 Login 请求推不进，
+                // `up --management-url` 在有界墙钟内写不进新 URL。down 停掉引擎后，同样的
+                // up 数秒内即可把新 URL 写进 daemon 配置（写入先于登录完成，不依赖登录
+                // 成功）。仅在确认分叉时 down：URL 一致的瞬时断连不能无差别 down——
+                // 管理面断连期间 P2P 数据面可能仍在工作。
+                if (mr.url != null) {
+                    let held = _daemon_mgmt_url(bin);
+                    if (held != null && _norm_mgmt_url(held) != _norm_mgmt_url(mr.url))
+                        _exec_short_verb(bin, 'down');
+                }
 
                 let reconnect_with_existing_identity = (length(setup_key) == 0);
                 // watchdog 发起的重连只是"执行已有意图",不应改写 desired_connected;只有用户发起的
