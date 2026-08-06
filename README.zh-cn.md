@@ -8,6 +8,7 @@
 
 OpenWrt / ImmortalWrt 上管理 [NetBird](https://netbird.io) mesh-VPN 客户端的 LuCI 应用 —— 在路由器上使用 NetBird，无需命令行。
 同时兼容 OpenWrt / ImmortalWrt 22.03 / 23.05 / 24.x（`opkg`）和 25.x / 最新 snapshot（`apk`）。
+OpenWrt 21.02 及更早版本无法支持——官方软件源缺少后端运行所需的 `ucode` / `rpcd-mod-ucode`。
 
 ## 功能
 
