@@ -63,13 +63,27 @@ _clear_error() {
 	_runtime_set last_error "" >/dev/null 2>&1 || true
 }
 
+# 参数:bin 之后的其余参数原样传给 status(如 --json)。
+# timeout 用纯数字秒(BusyBox timeout 与 GNU 都接受;后缀形态并非处处支持)。
 _with_timeout_status() {
 	bin="$1"
+	shift
 	if command -v timeout >/dev/null 2>&1; then
-		timeout 6s "$bin" status 2>&1
+		timeout 6 "$bin" status "$@" 2>&1
 	else
-		"$bin" status 2>&1
+		"$bin" status "$@" 2>&1
 	fi
+}
+
+# JSON 采样字段提取(sed 即可,不引入 jsonfilter 依赖)。
+# daemonStatus 是 status --json 顶层字段;management.connected 的字段序由上游结构体
+# 固定(url→connected→error),用 [^}]* 防御字段增插。
+_json_daemon_status() {
+	printf '%s' "$1" | sed -n 's/.*"daemonStatus":"\([^"]*\)".*/\1/p'
+}
+
+_json_mgmt_connected() {
+	printf '%s' "$1" | sed -n 's/.*"management":{[^}]*"connected":\([a-z]*\).*/\1/p'
 }
 
 _match() {
@@ -102,6 +116,8 @@ _attempt_reconnect() {
 	fi
 }
 
+last_unknown=""   # 已记录过的"未识别状态"签名,同形态只记一次日志
+
 while :; do
 	bin="$(_resolve_bin 2>/dev/null)"
 	if [ -z "$bin" ]; then
@@ -109,14 +125,24 @@ while :; do
 		continue
 	fi
 
-	raw="$(_with_timeout_status "$bin")"
+	# 状态采样:JSON 优先。NeedsLogin/LoginFailed/SessionExpired 三态下 status 的
+	# **文本**输出会早退成一段 SSO 提示文案(不含 "Management:" 行),文本正则全部
+	# 落空;--json 不受早退影响。老版本 netbird 在部分状态下 --json 也返回纯文本,
+	# 此时 daemonStatus 解析为空 → 回退文本输出,走旧文本正则。
+	raw="$(_with_timeout_status "$bin" --json)"
+	ds="$(_json_daemon_status "$raw")"
+	if [ -z "$ds" ]; then
+		raw="$(_with_timeout_status "$bin")"
+	fi
+
 	want="$(_desired)"
 
-	if _is_connected "$raw"; then
+	if [ "$(_json_mgmt_connected "$raw")" = "true" ] || _is_connected "$raw"; then
 		[ "$want" = "1" ] || _set_desired 1
 		_clear_error
 		_reset_backoff
 		attempt_wait=0
+		last_unknown=""
 		sleep "$INTERVAL"
 		continue
 	fi
@@ -137,7 +163,7 @@ while :; do
 		continue
 	fi
 
-	if _is_needs_login "$raw"; then
+	if [ "$ds" = "NeedsLogin" ] || _is_needs_login "$raw"; then
 		_set_desired 0
 		_set_error "Authentication failed: NetBird did not receive a valid setup key."
 		_log "needs login; stopped automatic reconnect"
@@ -145,15 +171,30 @@ while :; do
 		continue
 	fi
 
-	if [ -z "$raw" ] || _is_transient_disconnect "$raw"; then
-		# 退避只作用于"重连尝试"频率,不拖慢轮询:仅当 attempt_wait 归零才发起一次 do_up,
-		# 随后按当前 backoff 设定下次尝试等待并增长 backoff;期间每 INTERVAL 仍轮询状态,
-		# 故 outage 恢复(daemon 自愈)后能在一个 INTERVAL 内检测到并清错复位。
-		if [ "$attempt_wait" -le 0 ]; then
-			_attempt_reconnect
-			attempt_wait="$backoff"
-			_bump_backoff
-		fi
+	# desired=1 且未连接、又不属于上面的停止类:一律按退避重试(默认重试)。
+	# LoginFailed / SessionExpired / Idle / Connecting 与未知形态都在此列——
+	# 一次失败的重连尝试可能把 daemon 推进 LoginFailed(文本早退态),若只对
+	# "已知瞬时错误"重试,这类形态会静默空转、永不自愈。未识别形态记一条日志
+	# (同形态只记一次)供后续归类,绝不静默 no-op。
+	case "$ds" in
+		LoginFailed|SessionExpired|Idle|Connecting|Connected) : ;;
+		*)
+			if [ -n "$ds" ] || { [ -n "$raw" ] && ! _is_transient_disconnect "$raw"; }; then
+				sig="${ds:-$(printf '%s\n' "$raw" | sed -n 1p)}"
+				if [ "$sig" != "$last_unknown" ]; then
+					_log "unrecognized status (retrying anyway): $sig"
+					last_unknown="$sig"
+				fi
+			fi
+			;;
+	esac
+	# 退避只作用于"重连尝试"频率,不拖慢轮询:仅当 attempt_wait 归零才发起一次 do_up,
+	# 随后按当前 backoff 设定下次尝试等待并增长 backoff;期间每 INTERVAL 仍轮询状态,
+	# 故 outage 恢复(daemon 自愈)后能在一个 INTERVAL 内检测到并清错复位。
+	if [ "$attempt_wait" -le 0 ]; then
+		_attempt_reconnect
+		attempt_wait="$backoff"
+		_bump_backoff
 	fi
 
 	[ "$attempt_wait" -gt 0 ] && attempt_wait=$(( attempt_wait - INTERVAL ))
