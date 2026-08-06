@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r16 — 2026-08-07
+
+### Fixed
+
+- The automatic-reconnect watchdog could stall silently after a single failed reconnect attempt (#7). A failed attempt — for example at boot, when the uplink or DNS is not ready yet, common when the only uplink is a Wi-Fi repeater that associates late — can leave the netbird daemon in the `LoginFailed` state, whose plain status output is just a login hint that matches none of the watchdog's known patterns; the watchdog then polled forever without retrying, and only a manual disable/enable cycle recovered the connection. The watchdog now reads the machine-readable status first, and whenever automatic reconnect is on and the daemon is not connected — and the state is not a definitive authentication failure — it keeps retrying with the existing backoff, logging any unrecognized state instead of going quiet. Deliberate side effect: a plain `netbird down` on the command line is now also reconnected automatically while automatic reconnect is on; disconnect from the app's UI if you want to stay down.
+- The in-app updater rejected branch-snapshot firmwares such as `23.05-SNAPSHOT` (as shipped by GL.iNet 4.x) with `Unsupported OpenWrt release` (#7). It now recognizes any supported branch (22.03 / 23.05 / 24.10 / 25.12) regardless of the version suffix, matching what the install script already accepted; apk-based main-branch `SNAPSHOT` builds map to the 25.12 feed.
+
+### Changed
+
+- README and the website now state explicitly that OpenWrt 21.02 and older cannot be supported: their package feeds lack `ucode` / `rpcd-mod-ucode`, which the backend runs on.
+
 ## 0.1.0-r15 — 2026-08-05
 
 ### Fixed
