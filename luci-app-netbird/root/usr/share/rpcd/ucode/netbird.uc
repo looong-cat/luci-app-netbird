@@ -1620,14 +1620,22 @@ function _openwrt_series() {
     // 22.03 是能运行本应用的最老系列——它是第一个带 ucode / rpcd-mod-ucode 的版本。
     // 注意旧系列官方源的 netbird 较旧(23.05 为 0.24.x、22.03 为 0.17.x,无 networks 子命令):
     // 基础连接/状态可用,exit node 需在「版本」页切换到官方 release 二进制(≥0.35)。
-    if (match(rel, /^22\.03(\.|$)/))
-        return '24.10';
-    if (match(rel, /^23\.05(\.|$)/))
-        return '24.10';
-    if (match(rel, /^24\.10(\.|$)/))
-        return '24.10';
-    if (match(rel, /^25\.12(\.|$)/))
-        return '25.12';
+    // 版本串只取 `NN.MM` 前缀映射系列,后缀一概不管:分支 snapshot(如 GL.iNet 4.x
+    // 固件自报的 `23.05-SNAPSHOT`)、rc 与正式版同分支同依赖,按同系列处理。
+    // 安装脚本 feed.sh 的子串匹配本就接受这些形态,此处与其对齐。
+    let m = match(rel, /^([0-9]+\.[0-9]+)/);
+    if (m) {
+        let series = m[1];
+        if (series == '22.03' || series == '23.05' || series == '24.10')
+            return '24.10';
+        if (series == '25.12')
+            return '25.12';
+        return '';
+    }
+    // 主干 SNAPSHOT(无数字前缀):apk 系与 25.12 源同构,可用;opkg 系主干 snapshot
+    // 属远古形态,依赖面未知,保持不支持(与 feed.sh 行为一致)。
+    if (match(rel, /SNAPSHOT/))
+        return _pkg_mgr() == 'apk' ? '25.12' : '';
     if (length(rel) == 0)
         return _pkg_mgr() == 'apk' ? '25.12' : '24.10';
     return '';
