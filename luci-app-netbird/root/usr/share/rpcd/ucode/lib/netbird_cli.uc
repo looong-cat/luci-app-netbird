@@ -100,7 +100,12 @@ function fetch_status_json(bin_path) {
         return { ok: false, code: 'cli_error', message: 'The binary path is empty.' };
 
     let cmd = _with_timeout(shell_quote(bin_path) + ' status --json 2>&1');
-    let r = _popen_read(cmd, 8192);
+    // 读取上限须容纳完整 JSON:输出随 peers/networks/events 增长(netbird 0.76 实测
+    // 单 peer ~1.1KB,选 exit node 再追加 routes/networks 字段),超限截断会让 json()
+    // 抛 "unexpected end of data",且本函数被 get_status / 连接确认轮询等共用,
+    // 一旦截断 UI 会在连接完全正常时恒显 Disconnected。256KB 约容 200+ peer,
+    // 仍保留上限防异常输出撑爆内存(_popen_read 为读全量后截断,提高上限无管道风险)。
+    let r = _popen_read(cmd, 262144);
 
     if (r.exit_code == 124)
         return { ok: false, code: 'cli_error', message: 'timeout after 5s' };
