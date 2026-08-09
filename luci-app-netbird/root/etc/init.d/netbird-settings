@@ -64,9 +64,46 @@ _bool() {
 	fi
 	[ "$v" = "1" ]
 }
+# _tf f default —— 布尔字符串化：_bool 语义 → 输出 "true"/"false"（供显式 --flag=true/false 渲染）。
+_tf() {
+	if _bool "$1" "$2"; then
+		echo true
+	else
+		echo false
+	fi
+}
+# _ntf f default —— 取反布尔字符串化（供 --disable-*/--block-* 取反 flag 渲染）。
+_ntf() {
+	if _bool "$1" "$2"; then
+		echo false
+	else
+		echo true
+	fi
+}
+# _tf_sub parent parent-default f default —— 父开关控制的子项值：
+#   父开关(_bool parent parent-default)开启 → _tf f default；关闭 → 钉死 false（不读子项 UCI 残留，
+#   防「父关子开」悬空 flag 与 daemon 旧值粘滞）。
+_tf_sub() {
+	if _bool "$1" "$2"; then
+		_tf "$3" "$4"
+	else
+		echo false
+	fi
+}
+# _ntf_sub parent parent-default f default —— 同上，但子项侧为取反（供 --disable-ssh-auth）。
+_ntf_sub() {
+	if _bool "$1" "$2"; then
+		_ntf "$3" "$4"
+	else
+		echo false
+	fi
+}
 
 # ── 能力门控：抓 `netbird up --help` 支持的 flag 集合 ─────────────────────────
-# 旧版（如 opkg 0.59.13）缺细粒度 SSH/IPv6 flag → _has_flag 返非零 → 跳过该 flag。
+# 旧版（OpenWrt 22.03/23.05 官方源 netbird 0.17.0/0.24.3）的 up --help 缺大部分布尔 flag
+# 及 --wireguard-port / --interface-name：未知 flag 会使 netbird up 硬失败，故所有布尔 flag
+# （15 个）与这两个取值 flag 一律经 _has_flag 门控，help 无此 flag 则整条跳过；不支持的 flag
+# 在 daemon 侧无持久值，跳过零粘滞风险。
 _UP_HELP=""
 _load_up_help() {
 	_UP_HELP="$("$1" up --help 2>&1)"
@@ -93,22 +130,31 @@ _redact_psk() {
 # 退出码捕获（BusyBox ash 无 PIPESTATUS）：netbird up 不走管道（管道会丢退出码），
 #   输出重定向到临时文件，$? 即真实退出码，随后把临时文件喂 logger。
 #   NB_DRY_RUN=1 时只打印渲染命令、不执行（退出码 0），用于验收取反/门控。
-# 取反矩阵（UI 正向 → netbird flag）：
-#   enable_firewall=0       → --disable-firewall
-#   block_inbound=1         → --block-inbound
-#   allow_ssh=1             → --allow-server-ssh
-#   ssh_root=1              → --enable-ssh-root                       [gate]
-#   ssh_sftp=1              → --enable-ssh-sftp                       [gate]
-#   ssh_local_fwd=1         → --enable-ssh-local-port-forwarding      [gate]
-#   ssh_remote_fwd=1        → --enable-ssh-remote-port-forwarding     [gate]
-#   enable_ssh_auth=0       → --disable-ssh-auth                      [gate]
-#   enable_dns=0            → --disable-dns
-#   access_lan=0            → --block-lan-access
-#   accept_client_routes=0  → --disable-client-routes
-#   accept_server_routes=0  → --disable-server-routes
-#   enable_ipv6=0           → --disable-ipv6                          [gate]
-#   rosenpass_enabled=1     → --enable-rosenpass
-#   rosenpass_permissive=1  → --rosenpass-permissive  (仅 rosenpass 开启时 emit) [gate]
+# 布尔 flag 显式矩阵（UI 正向 → netbird flag；一律 --flag=true/false）：
+#   netbird up 对**省略**的 flag 保持 daemon 持久值不变（省略=保持）：若「开启才加、关闭省略」，
+#   用户取消勾选后 daemon 端旧值粘滞、取消不生效。故所有布尔 flag 一律显式输出
+#   --flag=true / --flag=false（cobra 标准语法），把 daemon 持久态钉死到 UCI 当前值。
+#   enable_firewall(默认1)      → --disable-firewall=<取反>                        [gate]
+#   block_inbound(默认0)        → --block-inbound=<原值>                           [gate]
+#   allow_ssh(默认0)            → --allow-server-ssh=<原值>                        [gate]
+#   ssh_root(默认0)             → --enable-ssh-root=<原值>                         [gate]
+#   ssh_sftp(默认0)             → --enable-ssh-sftp=<原值>                         [gate]
+#   ssh_local_fwd(默认0)        → --enable-ssh-local-port-forwarding=<原值>        [gate]
+#   ssh_remote_fwd(默认0)       → --enable-ssh-remote-port-forwarding=<原值>       [gate]
+#   enable_ssh_auth(默认1)      → --disable-ssh-auth=<取反>                        [gate]
+#   enable_dns(默认0)           → --disable-dns=<取反>                             [gate]
+#   access_lan(默认1)           → --block-lan-access=<取反>                        [gate]
+#   accept_client_routes(默认1) → --disable-client-routes=<取反>                   [gate]
+#   accept_server_routes(默认1) → --disable-server-routes=<取反>                   [gate]
+#   enable_ipv6(默认1)          → --disable-ipv6=<取反>                            [gate]
+#   rosenpass_enabled(默认0)    → --enable-rosenpass=<原值>                        [gate]
+#   rosenpass_permissive(默认0) → --rosenpass-permissive=<原值>                    [gate]
+#   取值 flag：--wireguard-port / --interface-name 同样挂门（0.17/0.24 的 up --help 无此 flag）。
+#   [gate] = 该版本 `netbird up --help` 无此 flag 则整条跳过——不支持的 flag 在 daemon 侧
+#   无持久值、跳过零粘滞风险；输出反而因 unknown flag 使 netbird up 硬失败。gate 只看
+#   _has_flag、与值无关：gate 决定「是否输出该 flag」，值决定「=true 还是 =false」。
+#   父开关（allow_ssh / rosenpass_enabled）关闭时，子项**钉死** =false：不读子项 UCI 残留值
+#   （UI depends 隐藏控件但不清值），既防「父关子开」的悬空 flag，也让 daemon 明确收到关闭。
 _render_and_apply() {
 	local bin="$1"
 	local port iface host mgmt loglevel psk psk_disp tmp rc
@@ -122,9 +168,20 @@ _render_and_apply() {
 	loglevel="$(_get log_level info)"
 	psk="$(_get preshared_key)"
 
-	set -- up --no-browser
-	[ -n "$port" ]  && set -- "$@" --wireguard-port "$port"
-	[ -n "$iface" ] && set -- "$@" --interface-name "$iface"
+	set -- up
+	# --no-browser(抑制 SSO 登录自动开浏览器)同样挂门:0.2x 无此 flag(headless 环境本就无
+	# 浏览器可开,省略同效),硬编码会在老版本上因 unknown flag 使 up 失败。
+	if _has_flag --no-browser; then
+		set -- "$@" --no-browser
+	fi
+	# --wireguard-port / --interface-name 同样挂门：0.17/0.24 的 up --help 无此 flag，未知 flag
+	# 会使 netbird up 硬失败。保持 `--flag value` 取值形态（不转 = 形态），门控经 _has_flag。
+	if _has_flag --wireguard-port && [ -n "$port" ]; then
+		set -- "$@" --wireguard-port "$port"
+	fi
+	if _has_flag --interface-name && [ -n "$iface" ]; then
+		set -- "$@" --interface-name "$iface"
+	fi
 	[ -n "$host" ]  && set -- "$@" --hostname "$host"
 	[ -n "$mgmt" ]  && set -- "$@" --management-url "$mgmt"
 	[ -n "$loglevel" ] && set -- "$@" --log-level "$loglevel"
@@ -136,47 +193,63 @@ _render_and_apply() {
 	psk_disp=""
 	[ -n "$psk" ] && psk_disp=" --preshared-key ***"
 
-	_bool enable_firewall 0 || set -- "$@" --disable-firewall
-	_bool block_inbound 1 && set -- "$@" --block-inbound
-
-	# SSH:子项(root/sftp/本地+远程转发/鉴权)只在 SSH 服务启用(allow_ssh=1)时才下发。
-	# UI 用 depends(allow_ssh=1) 隐藏子项,但后端不能只靠前端(前端可绕过):allow_ssh=0 时 UCI 可能
-	# 残留 ssh_root=1 等(depends 隐藏控件但不清值),若不在此 gate,会渲染出「SSH 服务没开却配
-	# root 登录」的悬空 flag(矩阵边界用例)。故整组子项嵌在 allow_ssh 之下,后端自洽。
-	if _bool allow_ssh 1; then
-		set -- "$@" --allow-server-ssh
-		if _has_flag --enable-ssh-root && _bool ssh_root 1; then
-			set -- "$@" --enable-ssh-root
-		fi
-		if _has_flag --enable-ssh-sftp && _bool ssh_sftp 1; then
-			set -- "$@" --enable-ssh-sftp
-		fi
-		if _has_flag --enable-ssh-local-port-forwarding && _bool ssh_local_fwd 1; then
-			set -- "$@" --enable-ssh-local-port-forwarding
-		fi
-		if _has_flag --enable-ssh-remote-port-forwarding && _bool ssh_remote_fwd 1; then
-			set -- "$@" --enable-ssh-remote-port-forwarding
-		fi
-		if _has_flag --disable-ssh-auth && ! _bool enable_ssh_auth 0; then
-			set -- "$@" --disable-ssh-auth
-		fi
+	# 布尔 flag 全量显式输出（--flag=true/false）：netbird up 对**省略**的 flag 保持 daemon 持久值
+	# 不变（省略=保持），「开启才加、关闭省略」会让取消勾选不生效（旧值粘滞）。显式输出
+	# =true/=false 把 daemon 持久态钉死到 UCI 当前值。正向 flag 用 _tf，取反 flag（--disable-*/--
+	# block-*）用 _ntf；SSH 子项 / rosenpass_permissive 用 _tf_sub/_ntf_sub（父关 → 钉死 false）。
+	# 全部 15 个布尔 flag 一律经 _has_flag 门控（该版本 up --help 无此 flag 则整条跳过，见上）。
+	if _has_flag --disable-firewall; then
+		set -- "$@" "--disable-firewall=$(_ntf enable_firewall 0)"
+	fi
+	if _has_flag --block-inbound; then
+		set -- "$@" "--block-inbound=$(_tf block_inbound 1)"
 	fi
 
-	_bool enable_dns 1 || set -- "$@" --disable-dns
-
-	_bool access_lan 0 || set -- "$@" --block-lan-access
-	_bool accept_client_routes 0 || set -- "$@" --disable-client-routes
-	_bool accept_server_routes 0 || set -- "$@" --disable-server-routes
-
-	if _has_flag --disable-ipv6 && ! _bool enable_ipv6 0; then
-		set -- "$@" --disable-ipv6
+	# SSH 子项（root/sftp/本地+远程转发/鉴权）：gate 只看 _has_flag（旧版 netbird 缺细粒度 flag
+	# 则整条不输出），与值无关；值 = allow_ssh 开启时读子项 UCI（未设置按默认），allow_ssh=0 时
+	# 钉死 false——不读子项 UCI 残留（UI depends(allow_ssh=1) 隐藏控件但不清值、前端可绕过，可能
+	# 残留 1），既防「父关子开」的悬空 flag，也让 daemon 明确收到关闭信号、不留粘滞。
+	if _has_flag --allow-server-ssh; then
+		set -- "$@" "--allow-server-ssh=$(_tf allow_ssh 1)"
+	fi
+	if _has_flag --enable-ssh-root; then
+		set -- "$@" --enable-ssh-root="$(_tf_sub allow_ssh 1 ssh_root 1)"
+	fi
+	if _has_flag --enable-ssh-sftp; then
+		set -- "$@" --enable-ssh-sftp="$(_tf_sub allow_ssh 1 ssh_sftp 1)"
+	fi
+	if _has_flag --enable-ssh-local-port-forwarding; then
+		set -- "$@" --enable-ssh-local-port-forwarding="$(_tf_sub allow_ssh 1 ssh_local_fwd 1)"
+	fi
+	if _has_flag --enable-ssh-remote-port-forwarding; then
+		set -- "$@" --enable-ssh-remote-port-forwarding="$(_tf_sub allow_ssh 1 ssh_remote_fwd 1)"
+	fi
+	if _has_flag --disable-ssh-auth; then
+		set -- "$@" --disable-ssh-auth="$(_ntf_sub allow_ssh 1 enable_ssh_auth 0)"
 	fi
 
-	if _bool rosenpass_enabled 1; then
-		set -- "$@" --enable-rosenpass
-		if _has_flag --rosenpass-permissive && _bool rosenpass_permissive 1; then
-			set -- "$@" --rosenpass-permissive
-		fi
+	if _has_flag --disable-dns; then
+		set -- "$@" "--disable-dns=$(_ntf enable_dns 1)"
+	fi
+	if _has_flag --block-lan-access; then
+		set -- "$@" "--block-lan-access=$(_ntf access_lan 0)"
+	fi
+	if _has_flag --disable-client-routes; then
+		set -- "$@" "--disable-client-routes=$(_ntf accept_client_routes 0)"
+	fi
+	if _has_flag --disable-server-routes; then
+		set -- "$@" "--disable-server-routes=$(_ntf accept_server_routes 0)"
+	fi
+
+	if _has_flag --disable-ipv6; then
+		set -- "$@" "--disable-ipv6=$(_ntf enable_ipv6 0)"
+	fi
+
+	if _has_flag --enable-rosenpass; then
+		set -- "$@" "--enable-rosenpass=$(_tf rosenpass_enabled 1)"
+	fi
+	if _has_flag --rosenpass-permissive; then
+		set -- "$@" --rosenpass-permissive="$(_tf_sub rosenpass_enabled 1 rosenpass_permissive 1)"
 	fi
 
 	# dry-run：只打印、不执行（验收取反/门控用）。$* 不含 PSK（见上），仅追加静态占位。
