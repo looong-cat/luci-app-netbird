@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r17 — 2026-08-09
+
+### Fixed
+
+- LuCI could show NetBird as Disconnected while the connection was actually fine (#8). The backend read `netbird status --json` with an 8 KB cap; on larger meshes — or once an exit node is selected — the output exceeds it, the truncated JSON fails to parse, and every status read in the app reports Disconnected (exit-node switching also showed `"status --json" did not return JSON`). The cap is now 256 KB. Display-only: the connection itself was never affected. As usual, reboot once after upgrading (or restart rpcd) so the updated backend loads.
+
 ## 0.1.0-r16 — 2026-08-07
 
 ### Fixed
