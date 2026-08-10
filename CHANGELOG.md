@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r19 — 2026-08-10
+
+### Fixed
+
+- The in-app updater no longer installs the Simplified Chinese translation package on systems that never had it (#3, follow-up report by [@Kopterlove](https://github.com/Kopterlove)). It used to download and install the translation package unconditionally alongside the main package, and installing it re-registers Chinese in LuCI's language list — so updating from the Version tab brought Chinese back on English-only systems, undoing the r9 cleanup. The updater now upgrades the translation package only when it is already installed, and never introduces it. Note: the update **to** r19 itself still runs under the old updater code, so affected routers should clean up once afterwards: `opkg remove luci-i18n-netbird-zh-cn` (apk-based systems: `apk del luci-i18n-netbird-zh-cn`), then `uci -q delete luci.languages.zh_cn && uci commit luci`; if the UI language itself got switched, `uci set luci.main.lang='auto' && uci commit luci`. As usual, reboot once after upgrading (or restart rpcd) so the updated backend loads.
+
 ## 0.1.0-r18 — 2026-08-10
 
 ### Fixed

@@ -30,7 +30,7 @@ LUCI_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 
 PKG_NAME:=luci-app-netbird
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=18
+PKG_RELEASE:=19
 PKG_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 PKG_LICENSE:=Apache-2.0
 PKG_LICENSE_FILES:=LICENSE
