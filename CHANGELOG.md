@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r18 — 2026-08-10
+
+### Fixed
+
+- Unchecking a boolean setting now actually takes effect (#9, reported with a spot-on analysis by [@mipa87](https://github.com/mipa87)). The netbird daemon keeps its previously persisted value for any flag omitted from `netbird up`, and the app only passed boolean flags when they were switched on — so switching one off (Rosenpass Permissive, inbound blocking, SSH options, and every other toggle) silently kept the old value. All boolean settings are now passed explicitly as `--flag=true/false`, pinning the daemon to the configured state; applying settings once also heals any value stuck from before. Each flag is additionally capability-gated against the running binary's `netbird up --help` — a side benefit is that applying settings now works at all on the very old netbird shipped by the 22.03/23.05 package feeds, which used to hard-fail on flags those binaries don't know. Takes effect on the first Save & Apply after upgrading — no reboot needed.
+
 ## 0.1.0-r17 — 2026-08-09
 
 ### Fixed
