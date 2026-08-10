@@ -1681,6 +1681,20 @@ function _luci_pkg_filename(pkg, ver, ext) {
     return '';
 }
 
+// _luci_i18n_installed() → 系统是否已装 luci-i18n-netbird-zh-cn(中文语言包)。
+// 更新器据此决定是否连带升级语言包:已装才升(i18n 子包版本跟随主包,升级刷新 .lmo),
+// 未装绝不引入——语言包装不装是用户在安装入口的选择(install.sh 不带 / install-zh.sh 带),
+// 更新不得改变它;无条件安装会把中文重新注册进 LuCI 语言列表(zh 包 uci-defaults),#3。
+// 查询只读本地包数据库,不联网;查询失败按未装处理(宁可跳过 i18n 升级,不误引入)。
+function _luci_i18n_installed() {
+    if (_pkg_mgr() == 'apk') {
+        let r = _popen_simple('apk list --installed luci-i18n-netbird-zh-cn 2>/dev/null');
+        return match(r.out || '', /(^|\n)luci-i18n-netbird-zh-cn-[0-9]/) != null;
+    }
+    let r = _popen_simple('opkg list-installed luci-i18n-netbird-zh-cn 2>/dev/null');
+    return match(r.out || '', /(^|\n)luci-i18n-netbird-zh-cn\s+-\s+/) != null;
+}
+
 function _luci_app_update_info() {
     let spec = _luci_feed_spec();
     let local = get_opkg_versions().luci_app_netbird || '';
@@ -1717,7 +1731,7 @@ function _luci_app_update_info() {
     base.latest_version = latest;
     base.update_available = (_pkgver_cmp(local, latest) < 0);
     base.main_package = _luci_pkg_filename('luci-app-netbird', latest, spec.pkg_ext);
-    base.i18n_package = match(i18n || '', _PKGVER_RE) ? _luci_pkg_filename('luci-i18n-netbird-zh-cn', i18n, spec.pkg_ext) : '';
+    base.i18n_package = (_luci_i18n_installed() && match(i18n || '', _PKGVER_RE)) ? _luci_pkg_filename('luci-i18n-netbird-zh-cn', i18n, spec.pkg_ext) : '';
     return { ok: true, data: base };
 }
 
