@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r20 — 2026-08-13
+
+### Added
+
+- The exit node selected in LuCI now survives a reboot ([#10](https://github.com/looong-cat/luci-app-netbird/issues/10), requested by [@netsrot303](https://github.com/netsrot303)). The netbird daemon keeps its network selection in a state file that lives in RAM on OpenWrt, so every reboot silently dropped the selected exit node. The app now stores the selection in its own configuration when you apply it, and the automatic-reconnect watchdog re-selects it once per boot after the connection is up — typically within a minute of booting. Switching the exit node off in LuCI clears the stored selection, and that also sticks across reboots. Selections made outside LuCI (via the netbird CLI or other clients) are not stored. Restoring never selects anything that is not offered by the management server at that moment; if the configured exit node no longer exists, it is skipped with a log line.
+
+### Fixed
+
+- Logging in with an invalid or expired setup key now fails in about half a minute with the actual reason instead of a raw RPC error. The daemon retries a rejected key indefinitely, and the app used to keep polling long enough for the web server's 60-second RPC limit to cut the request — the browser then showed an unhelpful `ubus request timed out` error while the real cause (`the setup key was rejected…`) only landed in the "Last authentication error" field after a page reload. The backend now returns as soon as the failure can be classified, and any remaining timeout-type RPC errors are shown as a friendly message instead of raw error text.
+- After deregistering, pressing Connect with an empty setup key field used to stall for ~40 seconds before failing. A deregistered device has no identity left to reconnect with: the login page now states that a key is required (the masked "Last used" text is only a reminder — keys are never stored on the device), an empty submit is caught immediately in the page, and the backend answers instantly with the same message as a fallback.
+
+Reboot once after upgrading (or restart rpcd and the `luci-netbird-watchdog` service) so the updated backend and watchdog load.
+
 ## 0.1.0-r19 — 2026-08-10
 
 ### Fixed
