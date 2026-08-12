@@ -556,7 +556,8 @@ return view.extend({
 			ui.addNotification(null, E('p', {}, _('luci-app-netbird update failed: %s').format((res && res.message) || _('unknown error'))), 'error');
 		}, function (err) {
 			ui.hideModal();
-			ui.addNotification(null, E('p', {}, _('luci-app-netbird update failed: %s').format(err && err.message ? err.message : _('unknown error'))), 'error');
+			ui.addNotification(null, E('p', {}, _('luci-app-netbird update failed: %s').format(
+				err ? nb.friendlyRpcError(err, _('The operation did not finish within the RPC time limit and may still be running in the background. Refresh this page in a minute to check the result.')) : _('unknown error'))), 'error');
 		});
 	},
 
@@ -627,7 +628,8 @@ return view.extend({
 		}, function (err) {
 			self._downloadToken = token + 1;
 			ui.hideModal();
-			ui.addNotification(null, E('p', {}, _('Download/install failed: %s').format(err && err.message ? err.message : self._downloadFailureMessage(null))), 'error');
+			ui.addNotification(null, E('p', {}, _('Download/install failed: %s').format(
+				err ? nb.friendlyRpcError(err, _('The operation did not finish within the RPC time limit and may still be running in the background. Refresh this page in a minute to check the result.')) : self._downloadFailureMessage(null))), 'error');
 		});
 	},
 

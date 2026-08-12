@@ -102,8 +102,30 @@ function statusPill(state, label) {
     return E('span', { 'class': 'nb-pill nb-pill-' + safeState }, label == null ? '' : String(label));
 }
 
+/**
+ * friendlyRpcError(e, fallbackMsg) — 长 RPC 的超时/掐断错误统一友好化
+ *
+ * 两个来源的文案都指同一件事「后端还在跑,前端等不到了」:
+ *   - 'XHR request timed out'      — LuCI 客户端 rpctimeout 到点(request.js)
+ *   - 'ubus request timed out'     — uhttpd script_timeout(默认 60s)掐断进行中的
+ *     /ubus 调用,rpc.js 以 "RPC call to %s/%s failed with error -32003: ubus
+ *     request timed out" reject;后端 rpcd 不受影响、会继续执行完
+ * 其余错误原样透传(保留可定位上下文)。
+ *
+ * @param {*}      e            catch 到的异常(Error 或任意值)
+ * @param {string} fallbackMsg  可选;命中超时类时的替代文案(默认指向 Logs tab)
+ * @returns {string}
+ */
+function friendlyRpcError(e, fallbackMsg) {
+    var msg = String(e && e.message ? e.message : e);
+    if (/XHR request timed out|ubus request timed out/i.test(msg))
+        return fallbackMsg || _('The NetBird operation is still running or took too long. Check the Logs tab, then try again.');
+    return msg;
+}
+
 return L.Class.extend({
-    pair:       pair,
-    code:       code,
-    statusPill: statusPill
+    pair:             pair,
+    code:             code,
+    statusPill:       statusPill,
+    friendlyRpcError: friendlyRpcError
 });

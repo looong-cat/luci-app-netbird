@@ -3014,6 +3014,26 @@ return {
                 if (length(setup_key) > 0 && r.stdout != null)
                     r.stdout = replace(r.stdout, setup_key, '***');
 
+                // 认证 fatal 早退：CLI 被墙钟杀掉（stdout 带 wrapper 的 timed out 标记）
+                // 且日志已沉淀可归因的认证错误（如 setup key 被拒）时，_poll_connected
+                // 纯属白等——daemon 对无效/过期 key 无限 backoff，绝不会自行连上；而
+                // uhttpd 对浏览器 /ubus 调用有 60s 硬上限（script_timeout 默认值），多等的轮询会
+                // 把总墙钟推过掐断线，前端只能收到裸 -32003 而非下面的归因文案。
+                // 门槛必须含"CLI 是被杀的"：有效 key 的成功登录 CLI 会在墙钟内自行
+                // 返回（不带标记），不会进此分支——成功路径中 daemon 早期也可能落
+                // PermissionDenied/no peer auth method 之类瞬时行，仅凭日志归因会误杀。
+                let cli_timed_out = !!match(r.stdout || '', /netbird command timed out after/);
+                if (cli_timed_out) {
+                    let early_auth = _auth_failure_from_attempt(r.stdout || '', auth_log_before);
+                    if (early_auth != null) {
+                        setup_key = '';
+                        _exec_short_verb(bin, 'down');
+                        _set_desired_connected(false);
+                        _persist_runtime_error(early_auth.message);
+                        return err(CODE.CONNECT_FAILED, early_auth.message, early_auth.hint);
+                    }
+                }
+
                 // exec 后同步轮询确认（不信任 up 退出码本身）
                 let poll = _poll_connected(bin, from_watchdog ? 3 : 6);
                 if (poll.connected) {

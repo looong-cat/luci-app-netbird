@@ -102,10 +102,8 @@ function responseMessage(res, fallback) {
 }
 
 function exceptionMessage(e) {
-	var msg = String(e && e.message ? e.message : e);
-	if (/XHR request timed out/i.test(msg))
-		return _('The NetBird operation is still running or took too long. Check the Logs tab, then try again.');
-	return msg;
+	// 超时类(客户端 rpctimeout / uhttpd 60s 掐断)统一友好化,其余透传。
+	return nb.friendlyRpcError(e);
 }
 
 function runAction(btn, promise, okMsg, failMsg) {

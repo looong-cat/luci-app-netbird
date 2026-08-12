@@ -267,9 +267,7 @@ return view.extend({
 			btn.disabled = false;
 		}, function (e) {
 			ui.hideModal();
-			var em = String(e && e.message ? e.message : e);
-			if (/XHR request timed out/i.test(em))
-				em = _('The NetBird operation is still running or took too long. Check the Logs tab, then try again.');
+			var em = nb.friendlyRpcError(e);
 			ui.addNotification(null, E('p', {}, em), 'error');
 			btn.classList.remove('spinning');
 			btn.disabled = false;
