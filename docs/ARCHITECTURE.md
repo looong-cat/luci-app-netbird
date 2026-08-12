@@ -213,14 +213,23 @@ self-heal, so a router managed over the mesh could hard-lock. Instead:
   exclusive on every netbird version (the daemon-side reconciliation only exists on newer ones).
   Positional ids are passed after `--` (cobra's flag terminator) so leading-dash names work; the
   literal name `all` is excluded on both paths because the CLI treats a sole `all` argument as
-  select-all/deselect-all. Selection state lives in the netbird daemon (persisted across restarts),
-  deliberately **not** in UCI — a second source of truth would drift from management-console changes.
+  select-all/deselect-all. The daemon keeps its selection in `state.json`, which sits under
+  `/var/lib` — tmpfs on OpenWrt, so it does not survive a reboot. Selections made through LuCI are
+  therefore also persisted to UCI (`netbird.settings.exit_node`; cleared when switched off).
+- `restore_exit_node` (write; watchdog-only, not exposed in the session ACL — the
+  automatic-reconnect watchdog calls it as root over local ubus once per boot, gated by a tmpfs
+  flag file) — re-applies the persisted selection after the connection is up. Idempotent, and the
+  target must be present in a fresh `networks list` (same whitelist as `select_exit_node`), so a
+  route deleted in the management console is skipped with a log line instead of retried forever;
+  management-console changes always win. Selections made outside LuCI are not persisted.
 
 ## Conventions (gotchas worth knowing)
 
 - **ucode modules** load via `loadfile()` IIFE (the runtime build does not support `export`), and
   **do not hoist function declarations** — a helper must be defined textually before its callers.
-- **ACL ↔ method table** must stay strictly 1:1 (13 read + 15 write = 28).
+- **ACL ↔ method table** must stay strictly 1:1 for UI-callable methods (13 read + 16 write = 29
+  of the 30 registered methods; the one exception is `restore_exit_node`, which is watchdog-only
+  and deliberately kept out of the session ACL).
 - **DOM** is built with `E()` only (XSS).
 - **Binary/state paths** are probed at runtime, never hard-coded.
 - Identity is protected on two axes: `conffiles` (opkg upgrades) and `sysupgrade.conf`
