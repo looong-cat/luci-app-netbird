@@ -116,6 +116,35 @@ _attempt_reconnect() {
 	fi
 }
 
+# exit node 开机恢复:LuCI 选择持久化在 netbird.settings.exit_node,而 daemon 自己的
+# 选择态(state.json)在 tmpfs、重启必丢(GitHub #10)。连接态下每 boot 恢复一次:
+# 标志文件在 /var/run(tmpfs),重启自动清零。restore_exit_node 幂等;终态
+# (restored/already-selected/not-configured/not-found)落标志不再重试,
+# not-connected/error/超时留待下轮。同 boot 内用户经 CLI 的手动调整不会被反复覆盖。
+EXITNODE_FLAG="/var/run/netbird-luci-exitnode.restored"
+
+_maybe_restore_exit_node() {
+	[ -f "$EXITNODE_FLAG" ] && return 0
+	en="$(uci -q get netbird.settings.exit_node 2>/dev/null)"
+	if [ -z "$en" ]; then
+		touch "$EXITNODE_FLAG" 2>/dev/null
+		return 0
+	fi
+	out="$(ubus -t 30 call luci.netbird restore_exit_node 2>/dev/null)"
+	case "$out" in
+	*'"result": "restored"'*)
+		touch "$EXITNODE_FLAG" 2>/dev/null
+		_log "restored exit node \"$en\" after restart" ;;
+	*'"result": "already-selected"'*|*'"result": "not-configured"'*)
+		touch "$EXITNODE_FLAG" 2>/dev/null ;;
+	*'"result": "not-found"'*)
+		touch "$EXITNODE_FLAG" 2>/dev/null
+		_log "configured exit node \"$en\" is not available on this network; leaving it unselected" ;;
+	*)
+		: ;;
+	esac
+}
+
 last_unknown=""   # 已记录过的"未识别状态"签名,同形态只记一次日志
 
 while :; do
@@ -143,6 +172,7 @@ while :; do
 		_reset_backoff
 		attempt_wait=0
 		last_unknown=""
+		_maybe_restore_exit_node
 		sleep "$INTERVAL"
 		continue
 	fi

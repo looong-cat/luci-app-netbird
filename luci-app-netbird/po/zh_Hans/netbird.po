@@ -299,8 +299,8 @@ msgstr "NetBird 未运行。请先在「认证」页启动并连接。"
 msgid "No exit nodes are available. Set up a peer as an exit node in the NetBird management console first."
 msgstr "当前没有可用的出口节点。请先在 NetBird 管理控制台中将某个节点设置为出口节点。"
 
-msgid "Route all internet traffic from this router and its clients through a NetBird peer. Exit nodes are defined in the NetBird management console. Changes take effect immediately and are remembered by the NetBird daemon."
-msgstr "将本路由器及其客户端的全部互联网流量经由某个 NetBird 节点转发。出口节点在 NetBird 管理控制台中定义。切换立即生效，并由 NetBird 守护进程持久保存。"
+msgid "Route all internet traffic from this router and its clients through a NetBird peer. Exit nodes are defined in the NetBird management console. Changes take effect immediately; the selection made here is saved and re-applied automatically after the router reboots."
+msgstr "将本路由器及其客户端的全部互联网流量经由某个 NetBird 节点转发。出口节点在 NetBird 管理控制台中定义。切换立即生效；在此处所做的选择会被保存，并在路由器重启后自动恢复。"
 
 msgid "Switch exit node"
 msgstr "切换出口节点"

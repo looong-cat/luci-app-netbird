@@ -39,6 +39,9 @@ config netbird 'settings'
 	# 安装密钥打码 hint（非机密：已消费 key 的部分前缀，由 do_up/do_login 成功后写入）
 	# 绝不存原始 setup_key（安全基线），仅供认证页「上次使用」展示
 	option setup_key_hint ''
+	# exit node 选择持久化（select_exit_node 成功后写入，关闭时清空；
+	# 重启后由 watchdog 经 restore_exit_node 恢复——daemon 自己的选择态在 tmpfs 重启即丢）
+	option exit_node ''
 
 config state 'runtime'
 	option last_connect_ts ''

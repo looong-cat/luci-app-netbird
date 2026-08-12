@@ -92,6 +92,8 @@ elif head -n1 "$CONFIG_FILE" | grep -qF 'schema v1'; then
 	_set_if_missing preshared_key ''
 	# 安装密钥打码 hint（非机密；do_up/do_login 成功后写入，绝不存原始 key）
 	_set_if_missing setup_key_hint ''
+	# exit node 选择持久化（select_exit_node 写入；watchdog 重启后恢复）
+	_set_if_missing exit_node ''
 
 	# state.runtime section：若不存在则创建并初始化（补缺失）
 	if ! uci -q get netbird.runtime > /dev/null 2>&1; then

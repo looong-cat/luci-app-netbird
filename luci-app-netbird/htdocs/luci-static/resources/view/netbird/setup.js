@@ -225,7 +225,7 @@ return view.extend({
 		dom.content(this._exitBox, E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, _('Exit node')),
 			E('p', { 'class': 'cbi-section-descr' },
-				_('Route all internet traffic from this router and its clients through a NetBird peer. Exit nodes are defined in the NetBird management console. Changes take effect immediately and are remembered by the NetBird daemon.')),
+				_('Route all internet traffic from this router and its clients through a NetBird peer. Exit nodes are defined in the NetBird management console. Changes take effect immediately; the selection made here is saved and re-applied automatically after the router reboots.')),
 			body
 		]));
 	},

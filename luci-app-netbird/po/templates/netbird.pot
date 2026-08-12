@@ -667,7 +667,8 @@ msgstr ""
 msgid ""
 "Route all internet traffic from this router and its clients through a "
 "NetBird peer. Exit nodes are defined in the NetBird management console. "
-"Changes take effect immediately and are remembered by the NetBird daemon."
+"Changes take effect immediately; the selection made here is saved and re-"
+"applied automatically after the router reboots."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/netbird/setup.js:259
