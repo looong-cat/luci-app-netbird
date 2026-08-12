@@ -46,6 +46,7 @@ let probe_iface_backend  = _state.probe_iface_backend;
 let fetch_status_json    = _cli.fetch_status_json;
 let get_opkg_versions    = _cli.get_opkg_versions;
 let probe_running_via_ubus = _cli.probe_running_via_ubus;
+let classify_status_text = _cli.classify_status_text;
 
 // ============================================================================
 // _safe(fn) — 异常网
@@ -3013,6 +3014,22 @@ return {
                 }
 
                 let reconnect_with_existing_identity = (length(setup_key) == 0);
+                // 注销后/全新设备(daemon NeedsLogin = 无本地身份)上的空 key 连接
+                // 注定失败——daemon 只会反复 "no peer auth method provided",25s 墙钟耗尽
+                // 后才能归因,期间 desired 还被置 1 引来 watchdog 叠加重试。识别到该态
+                // 立即返回明确错误(不置 desired、不跑墙钟)。判定复用 classify_status_text:
+                // 只锚定 NeedsLogin——LoginFailed/Idle 等**有身份**形态的空 key 重连是
+                // 合法恢复路径,不拦;老版本 daemon 注销后文本形态不同(不报 NeedsLogin)
+                // 则识别不出,按原路径走,无回归。
+                if (reconnect_with_existing_identity) {
+                    let stx = _exec_short_verb(bin, 'status');
+                    if (classify_status_text(stx.stdout) == 'needs_login') {
+                        _persist_runtime_error('A setup key is required to log in: this device has no stored NetBird identity.');
+                        return err(CODE.CONNECT_FAILED,
+                            'A setup key is required to log in: this device has no stored NetBird identity.',
+                            'Enter a setup key from the NetBird console and click Connect. Keys are never stored on this device; "Last used" is only a masked hint.');
+                    }
+                }
                 // watchdog 发起的重连只是"执行已有意图",不应改写 desired_connected;只有用户发起的
                 // 连接才预置 desired=1(表达意图,即便本次超时也让 watchdog 续连)。否则 watchdog 会反复
                 // 把刚被认证 fatal/key 超时刻意清成 0 的 desired 重新写回 1,使刻意的停止无法生效。

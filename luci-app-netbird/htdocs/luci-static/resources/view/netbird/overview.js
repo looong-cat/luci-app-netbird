@@ -230,6 +230,15 @@ return view.extend({
 		var mgmtUrl = urlEl ? String(urlEl.value || '').trim() : '';
 		var setupKey = keyEl ? String(keyEl.value || '') : '';
 
+		// needs_login 态(无本地身份)空 key 必败且要白等墙钟——就地拦截,
+		// 不发 RPC(后端另有同语义兜底,防状态漂移/竞态)。
+		if (this._nbAuthState === 'needs_login' && setupKey.length === 0) {
+			ui.addNotification(null, E('p', {},
+				_('A setup key is required to log in. Enter a key from the NetBird console first.')), 'warning');
+			if (keyEl) keyEl.focus();
+			return;
+		}
+
 		// 提交即清空 Setup Key 输入框（前端不留存瞬时密钥）
 		if (keyEl) keyEl.value = '';
 
@@ -348,11 +357,17 @@ return view.extend({
 		if (state === 'not_installed')
 			return E('div', {});
 
-		// 已有本地身份（service 在跑或仅需登录）→ 提示留空即复用现有身份。
-		var loggedInHint = (state === 'running' || state === 'needs_login');
-		var keyPlaceholder = loggedInHint
-			? _('Logged in, leave blank to keep the current identity')
-			: _('Leave blank if already logged in');
+		// needs_login(注销后/全新设备,无本地身份)不能再提示「留空即可」——
+		// 该态下空 key 必败;只有 running(身份在)才提示留空复用。
+		var keyPlaceholder;
+		if (state === 'running')
+			keyPlaceholder = _('Logged in, leave blank to keep the current identity');
+		else if (state === 'needs_login')
+			keyPlaceholder = _('Enter a setup key to log in');
+		else
+			keyPlaceholder = _('Leave blank if already logged in');
+		// handleConnect 的空 key 前置校验需要知道渲染时的状态。
+		this._nbAuthState = state;
 
 		// Setup Key 输入框下方说明：基础说明 + 可选「上次使用：<hint>」。
 		var keyDescChildren = [
@@ -363,6 +378,12 @@ return view.extend({
 			// hint 作为 E() children 传入，浏览器当 Text node 处理（防 XSS）。
 			keyDescChildren.push(E('span', { 'class': 'nb-key-hint' },
 				_('Last used:') + ' ' + keyHint));
+			// 注销后打码 hint 仍显示,易被误读为「key 还在设备上」;补一句澄清。
+			if (state === 'needs_login') {
+				keyDescChildren.push(E('br'));
+				keyDescChildren.push(E('span', { 'class': 'cbi-value-description' },
+					_('Keys are not stored on the device; enter a key again to log in.')));
+			}
 		}
 
 		var rows = [ E('h3', {}, _('Authentication')) ];

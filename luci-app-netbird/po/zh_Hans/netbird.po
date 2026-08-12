@@ -1116,6 +1116,21 @@ msgstr "提示："
 msgid "The NetBird operation is still running or took too long. Check the Logs tab, then try again."
 msgstr "NetBird 操作仍在运行或耗时过长。请查看“日志”页后重试。"
 
+msgid "Enter a setup key to log in"
+msgstr "输入安装密钥以登录"
+
+msgid "A setup key is required to log in. Enter a key from the NetBird console first."
+msgstr "登录需要安装密钥。请先输入 NetBird 控制台生成的密钥。"
+
+msgid "Keys are not stored on the device; enter a key again to log in."
+msgstr "密钥不会保存在设备上——需重新输入密钥才能登录。"
+
+msgid "A setup key is required to log in: this device has no stored NetBird identity."
+msgstr "登录需要安装密钥：此设备上没有已保存的 NetBird 身份。"
+
+msgid "Enter a setup key from the NetBird console and click Connect. Keys are never stored on this device; \"Last used\" is only a masked hint."
+msgstr "请输入 NetBird 控制台生成的安装密钥后点击“连接”。密钥不会保存在设备上；“上次使用”只是打码提示。"
+
 msgid "The operation did not finish within the RPC time limit and may still be running in the background. Refresh this page in a minute to check the result."
 msgstr "操作未在 RPC 时限内完成，可能仍在后台运行。请稍等片刻后刷新本页查看结果。"
 
