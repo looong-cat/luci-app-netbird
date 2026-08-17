@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r21 — 2026-08-17
+
+### Fixed
+
+- The Exit Node tab now works on setups with many network resources ([#11](https://github.com/looong-cat/luci-app-netbird/issues/11), reported with careful measurements and on-device verification by [@nonnname](https://github.com/nonnname)). `netbird networks list` output grows with the number of network resources on the management server, and the app refused to parse it beyond a 64 KiB cap — about 680 resources at the observed ~97 bytes per entry — so listing and selecting an exit node both failed with "too many networks to parse safely". The same cap also silently disabled the reboot-time exit-node restore introduced in r20 on such peers. The cap is now 1 MiB (roughly 10k resources); the safeguard that refuses to act on a truncated list stays in place above it.
+- The `status --json` reader cap is raised from 256 KiB to 1 MiB for the same class of growth: that payload grows per routed resource rather than per peer, so a handful of routing peers could approach the old ceiling and reproduce the #8 symptom — the UI showing Disconnected while fully connected. Both readers always buffer the full output before truncating, so raising the caps costs one parse of a longer string, not extra memory.
+
 ## 0.1.0-r20 — 2026-08-13
 
 ### Added

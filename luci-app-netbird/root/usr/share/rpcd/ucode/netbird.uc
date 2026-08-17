@@ -479,9 +479,16 @@ function _exec_short_verb(bin, verb) {
 // 且以 ` -- ` 分隔（cobra 的 flag 终止符,实测可让 `-` 开头的 id 安全透传为位置参数）。
 // append=true 时 select 加 -a：附加式选择。不带 -a 的 select 会清空用户已选的
 // 全部其他网络路由（上游 CLI 语义是"替换整个选择集"），绝不能用于单节点切换。
-// 5s timeout 与 _exec_short_verb 同模式；输出上限 64KB,超限置 truncated（截断的
+// 5s timeout 与 _exec_short_verb 同模式；输出上限 1MiB,超限置 truncated（截断的
 // 列表解析会误判 selected/丢条目,调用方必须报错而不是拿残缺结果继续）。
-const _NETWORKS_OUT_MAX = 65536;
+// 容量按资源数估算:`networks list` 输出随管理端下发的 network resources 增长
+// （实测 ~97B/条,与 peer 数无关）,1MiB 约容 1 万条。fd.read('all') 本就全量
+// 驻留内存,提高上限只多一次更长字符串的解析,无管道风险。
+// 解析成本实测（x86 Celeron 3865U 1.8GHz,ucode 2025.07.18,合成列表）:
+// 82KB→0.38s/峰值 RSS 2.9MB,满 1MiB→4.45s/峰值 RSS 19MB,随字节数线性（无二次
+// 放大）;报告者 2218 条=215KB 的真实规模约 1s 量级。超限走 truncated 直接拒绝
+// （0.04s,不进解析）,故上限本身仍是撑爆内存的兜底。
+const _NETWORKS_OUT_MAX = 1048576;
 function _exec_networks(bin, verb, ids, append) {
     let base = shell_quote(bin) + ' networks ' + verb;
     if (append)
