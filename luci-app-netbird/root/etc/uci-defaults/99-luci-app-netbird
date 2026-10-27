@@ -234,6 +234,15 @@ sed -i '\#^/usr/share/netbird/$#d' /etc/sysupgrade.conf 2>/dev/null
 grep -qxF '/etc/config/netbird_bin' /etc/sysupgrade.conf 2>/dev/null || \
 	echo '/etc/config/netbird_bin' >> /etc/sysupgrade.conf
 
+# apk 机:本插件软件源的签名公钥由 feed 安装脚本写入,不属于任何软件包,sysupgrade 默认不保留;
+# 软件源地址(customfeeds.list 是 apk 包的 conffiles)却会保留,升级后 apk update 必然验签失败。
+# opkg 机的 /etc/opkg/keys/ 本身是 opkg 包的 conffiles,无需处理。
+NB_FEED_KEY=/etc/apk/keys/luci-app-netbird.pem
+if [ -f "$NB_FEED_KEY" ]; then
+	grep -qxF "$NB_FEED_KEY" /etc/sysupgrade.conf 2>/dev/null || \
+		echo "$NB_FEED_KEY" >> /etc/sysupgrade.conf
+fi
+
 # 遗留态 adopt(一次性,幂等):仅当 /usr/bin/netbird 是普通文件(非本应用建的 symlink)时,
 # 判定它是「系统软件源(包管理器)自带的二进制」还是「被旧版手动更新覆盖成的 release 二进制」。
 # 查询按运行时包管理器分流(apk = OpenWRT/ImmortalWrt 25+,opkg = 24.10 及更早;探测 /usr/bin/apk

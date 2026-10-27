@@ -20,6 +20,8 @@ elif [ -x /usr/bin/apk ]; then
 	apk del luci-i18n-netbird-zh-cn luci-app-netbird 2>/dev/null
 	sed -i "\\#$REPO#d" /etc/apk/repositories.d/customfeeds.list 2>/dev/null
 	rm -f /etc/apk/keys/luci-app-netbird.pem
+	# The app keeps the key across sysupgrade via /etc/sysupgrade.conf; drop that line too.
+	sed -i '\#^/etc/apk/keys/luci-app-netbird\.pem$#d' /etc/sysupgrade.conf 2>/dev/null
 	zh_left=$(apk list --installed 2>/dev/null | grep -c '^luci-i18n-.*-zh-cn-')
 fi
 
