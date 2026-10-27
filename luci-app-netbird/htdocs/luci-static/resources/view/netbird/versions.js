@@ -40,6 +40,12 @@ function belowSecureVersion(v) {
 	return false;
 }
 
+// 配置来源是 release 但 release 二进制不在(刷机后不保留,或首连自动下载没完成),实际跑的是别的来源。
+function releaseMissing(d) {
+	return d.configured_source === 'release' && d.active_source && d.active_source !== 'release' &&
+		!(d.release && d.release.installed);
+}
+
 function pkgMgrName(d) {
 	return (d && d.pkg_mgr === 'apk') ? 'apk' : 'opkg';
 }
@@ -144,8 +150,12 @@ return view.extend({
 			E('div', { 'class': 'nb-conn-info' }, [
 				E('div', { 'class': 'nb-pair' }, [
 					E('span', { 'class': 'nb-pair-label' }, _('Active source')),
-					E('span', { 'class': 'nb-pair-value' }, [
-						nb.statusPill('connected', srcLabel(d.active_source || 'release'))
+					E('div', { 'class': 'nb-pair-value nb-pair-value-block' }, [
+						nb.statusPill('connected', srcLabel(d.active_source || 'release')),
+						releaseMissing(d)
+							? E('div', { 'class': 'cbi-section-descr', 'style': 'color:#a00;margin-top:.3em' },
+								_('The configured source is NetBird-Release, but its binary is not on this device (it is not kept across firmware upgrades, or the automatic download did not finish), so another build is running. Select NetBird-Release below, click "Check for updates", then "Update now". On a slow connection, you can use a mirror URL under "Custom download".'))
+							: E('span', {})
 					])
 				]),
 				E('div', { 'class': 'nb-pair' }, [

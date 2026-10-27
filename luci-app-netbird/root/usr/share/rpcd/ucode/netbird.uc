@@ -1526,7 +1526,9 @@ function _wait_daemon_gone() {
 //   source=opkg    → /usr/bin/netbird 为 opkg 真二进制(切回时从保留副本 _NB_OPKG_BAK 复原;**绝不** reinstall)
 // OWRT25(apk)兼容:来源语义名仍叫 "opkg"(=「系统软件源」),底层 feed 查询/获取命令由
 // _pkg_mgr() 在 opkg(≤24.10)与 apk(≥25)间分流;安全红线:绝不 apk add/del/fix 切二进制(会连带删 init.d)。
-// release 存 _NB_REL_BIN(overlay 持久,uci-defaults 已追加进 sysupgrade.conf 保全)。
+// release 存 _NB_REL_BIN(overlay 持久,但**不**随 sysupgrade 保留:数十 MB 会撑大内存中的刷机备份;
+// sysupgrade.conf 只保留 netbird_bin 配置)。刷机后配置来源仍是 release、二进制没了,首次连接由
+// _ensure_configured_binary 自动重新下载,失败则继续用软件源版本,版本页提示来源不一致。
 const _NB_OPKG_BIN = '/usr/bin/netbird';        // opkg/daemon 规范路径(procd command 硬编码)
 const _NB_REL_DIR  = '/usr/share/netbird/bin';  // release 持久存储目录
 const _NB_REL_BIN  = '/usr/share/netbird/bin/netbird-release';
