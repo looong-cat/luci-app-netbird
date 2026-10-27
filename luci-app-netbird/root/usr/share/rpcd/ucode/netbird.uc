@@ -1398,11 +1398,15 @@ function _dl_cmd(url, out, secs, progress_total, headers) {
     let bounded = (secs != null && secs > 0);
     let tool = _dl_tool();
     if (tool == 'curl') {
-        let curl_to = bounded ? (' --max-time ' + secs) : ' --connect-timeout 20';
+        // 不限时的手动下载:GitHub 会跳转到资产 CDN 再建一次连接,慢线路上连接 + 握手可能超过 20s,
+        // 放宽到 60s 并重试 2 次;连续 120s 一个字节都收不到才判定卡死。
+        let curl_to = bounded ? (' --max-time ' + secs)
+                              : ' --connect-timeout 60 --retry 2 --speed-limit 1 --speed-time 120';
         let curl_headers = _download_headers(headers, 'curl');
         if (!to_file)
             return 'curl -fsSL' + curl_to + curl_headers + ' ' + q + ' 2>/dev/null';
-        let fetcher = 'curl -fL' + curl_to + curl_headers + ' -o ' + shell_quote(out) + ' ' + q + ' 2>&1';
+        // -sS:不输出进度表(进度由包装层按文件大小计算),只留 `curl: (N) ...` 报错,供失败信息取用。
+        let fetcher = 'curl -fsSL' + curl_to + curl_headers + ' -o ' + shell_quote(out) + ' ' + q + ' 2>&1';
         if (progress_total != null)
             return _progress_download_cmd(fetcher, out, secs, progress_total);
         return fetcher;
@@ -2444,8 +2448,13 @@ function _update_binary_locked(req) {
     let dl = _popen_simple(_dl_cmd(dl_url, tgz_path, dl_secs, progress_total, dl_headers));
     if (_progress_canceled() || dl.code == 130)
         return cancel_work();
-    if (dl.code != 0)
-        return fail_work(CODE.DOWNLOAD_FAILED, 'Failed to download the binary: ' + substr(dl.out, 0, 300));
+    if (dl.code != 0) {
+        // 下载器的报错(如 `curl: (28) ...`)在输出末尾,取最后 300 字符。
+        let dl_err = trim(dl.out);
+        if (length(dl_err) > 300)
+            dl_err = substr(dl_err, length(dl_err) - 300);
+        return fail_work(CODE.DOWNLOAD_FAILED, 'Failed to download the binary: ' + dl_err);
+    }
     _progress_phase('verifying', 'Verifying checksum and architecture...', tgz_path, progress_total);
     if (_progress_canceled())
         return cancel_work();
