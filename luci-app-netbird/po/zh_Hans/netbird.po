@@ -557,8 +557,8 @@ msgstr "更新"
 msgid "Userspace"
 msgstr "用户空间"
 
-msgid "Verbosity of the NetBird log."
-msgstr "NetBird 日志的详细程度。"
+msgid "Verbosity of the NetBird service log. Applied to the running service without reconnecting, and again whenever the service restarts. Requires netbird 0.27.4 or newer; older versions always log at info."
+msgstr "NetBird 服务日志的详细程度。无需重新连接即对运行中的服务生效，服务重启后会自动重新应用。需要 netbird 0.27.4 或更新版本；旧版本始终按 info 记录。"
 
 msgid "Caution:"
 msgstr "警告："
@@ -769,8 +769,8 @@ msgstr "当前来源已切换为 %s(运行 v%s)。"
 msgid "Switch failed."
 msgstr "切换失败。"
 
-msgid "The severity filter is a minimum threshold: choosing a level also shows all more severe levels. To capture DEBUG or TRACE lines, raise the log level on the Settings page and reconnect."
-msgstr "严重性过滤是「最低级别」阈值：选某级也会显示所有更严重的级别。要看到 DEBUG / TRACE 行，请在设置页提高日志级别并重新连接。"
+msgid "The severity filter is a minimum threshold: choosing a level also shows all more severe levels. To capture DEBUG or TRACE lines, raise the log level on the Settings page."
+msgstr "严重性过滤是「最低级别」阈值：选某级也会显示所有更严重的级别。要看到 DEBUG / TRACE 行，请在设置页提高日志级别。"
 
 # 版本管理相关串
 

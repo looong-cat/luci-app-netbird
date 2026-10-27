@@ -249,6 +249,14 @@ self-heal, so a router managed over the mesh could hard-lock. Instead:
   runs as `( exec cmd )` in the background with its output in a temp file, and a timer subshell `kill -9`s it
   when time is up (exit 124). The watchdog and `netbird-settings` source the same logic from
   `/usr/share/netbird/nb-run-bounded.sh`. Durations are plain seconds (no `s` suffix).
+- **The log level reaches the daemon over RPC, not through `up`.** The netbird package's init script starts
+  the daemon as plain `netbird service run` (level info, log file `/var/log/netbird/client.log`), and
+  `netbird up --log-level` only affects the `up` CLI process itself. `netbird-settings` and the watchdog
+  source `/usr/share/netbird/nb-log-level.sh`, which runs `netbird debug log level <level>` (netbird 0.27.4+,
+  detected from its `--help`; older versions are skipped with one log line). The level resets to info when
+  the daemon restarts, so the helper records the daemon PID (from procd) and level it last applied in
+  `/var/run/netbird-loglevel.applied` and re-applies whenever either changes; the watchdog checks this every
+  poll while the daemon responds. Changing only the level therefore does not reconnect.
 - **Settings apply never blocks procd.** procd runs config-change triggers one at a time, so a hung
   `netbird-settings` reload stalls every other config apply on the router. When the daemon reports
   `NeedsLogin`, the reload only writes `/etc/netbird-settings.pending` (no `netbird up`, which would wait for an

@@ -38,6 +38,8 @@ NB_SETTINGS_PENDING="/etc/netbird-settings.pending"
 NB_SETTINGS_APPLIED="/var/run/netbird-settings.applied"
 # 有界执行(timeout 不可用时的可移植实现),与 watchdog 共用。
 . /usr/share/netbird/nb-run-bounded.sh
+# 守护进程日志级别下发(与 watchdog 共用)。
+. /usr/share/netbird/nb-log-level.sh
 
 # ── 二进制路径运行时探测（运行时探测，不硬编码路径；对齐 paths.uc）─────────────
 # 候选：command -v netbird → /usr/bin/netbird → /usr/sbin/netbird；全无返非零。
@@ -167,7 +169,7 @@ _redact_psk() {
 #   （UI depends 隐藏控件但不清值），既防「父关子开」的悬空 flag，也让 daemon 明确收到关闭。
 _render_and_apply() {
 	local bin="$1"
-	local port iface host mgmt loglevel psk psk_disp tmp rc fp
+	local port iface host mgmt psk psk_disp tmp rc fp
 
 	_load_up_help "$bin"
 
@@ -175,7 +177,6 @@ _render_and_apply() {
 	iface="$(_get interface_name wt0)"
 	host="$(_get hostname)"
 	mgmt="$(_get management_url)"
-	loglevel="$(_get log_level info)"
 	psk="$(_get preshared_key)"
 
 	set -- up
@@ -194,7 +195,8 @@ _render_and_apply() {
 	fi
 	[ -n "$host" ]  && set -- "$@" --hostname "$host"
 	[ -n "$mgmt" ]  && set -- "$@" --management-url "$mgmt"
-	[ -n "$loglevel" ] && set -- "$@" --log-level "$loglevel"
+	# 日志级别不经 up 传递:up --log-level 只作用于 up 这个 CLI 进程,守护进程不读;
+	# 由 reload_service 经 nb_sync_log_level 单独下发,改级别也就不必断开重连。
 	# 敏感：WireGuard 预共享密钥（write-only）。**故意不放进 $@**——否则 $* 进 logread/dry-run
 	# 时整条命令含 PSK 原文，得靠脱敏；而脱敏正则对含空格的值会半脱敏泄露尾段，密钥脱敏不能依赖
 	# 前端校验（ACL 允许直接 uci 写 PSK，可绕过前端无空白校验）。改为：PSK 不入 $@，日志只显示
@@ -397,6 +399,8 @@ reload_service() {
 		sleep 2
 		st="$(nb_run_bounded 6 "$bin" status 2>&1)"
 	fi
+	# 守护进程能响应就下发日志级别(未登录时也下发,便于排查登录问题);失败只记日志,不影响应用。
+	printf '%s' "$st" | grep -q 'failed to connect to daemon' || nb_sync_log_level "$bin"
 	if printf '%s' "$st" | grep -qiE 'Daemon status: *Needs ?Login|login required'; then
 		: > "$NB_SETTINGS_PENDING"
 		logger -t "$TAG" "not logged in: settings saved; they are applied after the next successful login"

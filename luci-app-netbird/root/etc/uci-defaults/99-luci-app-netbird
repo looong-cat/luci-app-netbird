@@ -184,16 +184,6 @@ grep -qxF '/var/lib/netbird/' /etc/sysupgrade.conf 2>/dev/null || \
 # preshared_key 字段要求 0600，防止非 root 用户读取
 chmod 0600 "$CONFIG_FILE"
 
-# ── env file single source of truth ─────────────────────────────────────────
-# /etc/netbird.env 作为 LuCI 期望 env 配置的单一事实源，幂等保证含 NB_LOG_FILE=syslog。
-ENV_FILE=/etc/netbird.env
-[ -f "$ENV_FILE" ] || : > "$ENV_FILE"
-grep -qxF 'NB_LOG_FILE=syslog' "$ENV_FILE" || echo 'NB_LOG_FILE=syslog' >> "$ENV_FILE"
-chmod 0644 "$ENV_FILE"
-
-# 注：env override 未闭环（上游 netbird.init v0.66.2 不消费本文件），
-# get_logs 在 running 态走 logread -e netbird ring；若 ring 为空返 no_logs_in_ring 主路径。
-
 # ── init.d/netbird-settings 可执行性兜底 ─────────────────────────────────────
 # luci.mk 打包 root/ 时偶发把 /etc/init.d/netbird-settings 落成 0644（非可执行，跨
 # macOS↔Docker 卷构建时复现），导致 Save&Apply 无法执行其 reload。uci-defaults

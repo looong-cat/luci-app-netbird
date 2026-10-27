@@ -27,8 +27,9 @@ if [ ! -f "$INITD" ] && [ -f "$ROOT/luci-app-netbird/root/etc/init.d/netbird-set
 fi
 
 # ── 已知跳过清单(非设置项 / 有意不暴露)—— 改变决策时更新这里 ────────────────────
-# 操作/认证类 flag(不属于「设置」页范畴):
-SKIP_OPERATIONAL="--admin-url --anonymize --anonymize-level --config --daemon-addr --foreground-mode --help --log-file --no-browser --profile --qr --service --setup-key --setup-key-file"
+# 操作/认证类 flag(不属于「设置」页范畴)。--log-level 只作用于 up 这个 CLI 进程自身,
+# 设置页的日志级别经 `netbird debug log level` 下发到守护进程(见 nb-log-level.sh):
+SKIP_OPERATIONAL="--admin-url --anonymize --anonymize-level --config --daemon-addr --foreground-mode --help --log-file --log-level --no-browser --profile --qr --service --setup-key --setup-key-file"
 # 有意不暴露的设置 flag(评审后决定暂不做;若改主意,从此处移除并去 UI/init.d/i18n 添加):
 #   --mtu                                              错配致服务假死(脚枪),不暴露
 #   --external-ip-map --extra-dns-labels

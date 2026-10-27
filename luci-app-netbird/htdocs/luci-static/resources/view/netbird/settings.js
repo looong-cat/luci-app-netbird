@@ -239,7 +239,7 @@ return view.extend({
 		s.tab('logging', _('Logging'));
 
 		o = s.taboption('logging', form.ListValue, 'log_level', _('Log Level'),
-			_('Verbosity of the NetBird log.'));
+			_('Verbosity of the NetBird service log. Applied to the running service without reconnecting, and again whenever the service restarts. Requires netbird 0.27.4 or newer; older versions always log at info.'));
 		// netbird 官方日志级别(docs.netbird.io：trace/debug/info/warn/error,阈值语义
 		// 「debug 也含 info」)。panic/fatal 是 logrus 内部级别、守护进程用不到,不暴露。
 		// 与日志页严重性筛选保持同一套 5 级。

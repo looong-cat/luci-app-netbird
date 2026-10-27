@@ -11,6 +11,8 @@ TAG="luci-netbird-watchdog"
 INTERVAL="${NB_AUTORECONNECT_INTERVAL:-30}"
 # 有界执行(timeout 不可用时的可移植实现)与 netbird-settings 共用。
 . "${NB_LIBDIR:-/usr/share/netbird}/nb-run-bounded.sh"
+# 守护进程日志级别下发(与 netbird-settings 共用)。
+. "${NB_LIBDIR:-/usr/share/netbird}/nb-log-level.sh"
 # 重连连续失败时指数退避(INTERVAL→2x→…→封顶 MAX_INTERVAL),连上即复位;
 # 避免长时间 outage 每 INTERVAL 秒一次高成本 do_up + 日志刷屏。
 MAX_INTERVAL="${NB_AUTORECONNECT_MAX_INTERVAL:-300}"
@@ -177,6 +179,12 @@ while :; do
 	ds="$(_json_daemon_status "$raw")"
 	if [ -z "$ds" ]; then
 		raw="$(_with_timeout_status "$bin")"
+	fi
+
+	# 守护进程重启(崩溃被 procd 拉起、手动 restart、换二进制)后日志级别回到 info;
+	# 守护进程能响应时按设置补下发,PID 与级别都没变时不调用 netbird。
+	if [ -n "$ds" ] || _match "$raw" 'Daemon status|Management:'; then
+		nb_sync_log_level "$bin"
 	fi
 
 	want="$(_desired)"

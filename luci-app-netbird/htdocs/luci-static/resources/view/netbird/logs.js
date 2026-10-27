@@ -36,23 +36,24 @@ var LOG_RE = /^(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S+)\.(\
 
 // ── netbird 守护日志行格式正则 ──────────────────────────────────────────────────
 // 时间（RFC3339，无空格）+ 级别 + 可选 [peer: <key>] + 消息（含 源文件:行: 文本）。
-// 级别容忍 netbird 常见写法（INFO/WARN/WARNING/ERROR/ERRO/DEBUG/DEBU/TRACE/FATAL/PANIC）。
+// 级别容忍 netbird 常见写法（INFO/WARN/WARNING/ERROR/ERRO/DEBUG/DEBG/DEBU/TRACE/FATAL/PANIC）。
 var DAEMON_RE = /^(\S+)\s+([A-Z]{3,7})\s+(?:\[peer:\s*([^\]]+)\]\s+)?(.*)$/;
 
 // severity 规范化映射：各来源用词 → netbird 规范级别（忠实，不塌缩）。
-// netbird daemon 日志的级别字段是 logrus 4 字符大写截断（INFO/WARN/ERRO/DEBU/TRAC/FATA/PANI），
+// netbird daemon 日志的级别字段是 4 字符大写缩写：0.37.2 起为自定义写法（PANC/FATL/ERRO/WARN/
+// INFO/DEBG/TRAC），更早是 logrus 截断（PANI/FATA/ERRO/WARN/INFO/DEBU/TRAC），两套都收。
 // 这里统一还原为官方级别名。官方用户级别 5 个（trace/debug/info/warn/error）；
 // fatal/panic 为 logrus 内部级别，日志里极少出现，若出现仍忠实显示并归入 error 阈值（见 SEV_RANK），
 // 但不作为筛选下拉项（见 sevSelect）。
 var SEV_MAP = {
-	// netbird daemon 级别（4 字符截断 + 全称）
+	// netbird daemon 级别（4 字符缩写 + 全称）
 	'trac':    'TRACE',   'trace':   'TRACE',
-	'debu':    'DEBUG',   'debug':   'DEBUG',
+	'debg':    'DEBUG',   'debu':    'DEBUG',   'debug':   'DEBUG',
 	'info':    'INFO',
 	'warn':    'WARN',    'warning': 'WARN',
 	'erro':    'ERROR',   'error':   'ERROR',
-	'fata':    'FATAL',   'fatal':   'FATAL',
-	'pani':    'PANIC',   'panic':   'PANIC',
+	'fatl':    'FATAL',   'fata':    'FATAL',   'fatal':   'FATAL',
+	'panc':    'PANIC',   'pani':    'PANIC',   'panic':   'PANIC',
 	// syslog facility.severity（回退源 logread）→ 最接近的级别
 	'err':     'ERROR',
 	'crit':    'FATAL',
@@ -461,7 +462,7 @@ return view.extend({
 				// 阈值过滤 + 调级别引导(常见困惑:三个低级别看着一样=daemon 跑 info 级、文件
 				// 里没有 DEBUG/TRACE 行;选 INFO 见 WARN/选 WARN 见 ERROR=阈值语义)。纯文本不含 %s 防译文 hash 漂移。
 				E('p', { 'class': 'cbi-section-descr', 'style': 'margin:4px 0 8px;color:#888' },
-					_('The severity filter is a minimum threshold: choosing a level also shows all more severe levels. To capture DEBUG or TRACE lines, raise the log level on the Settings page and reconnect.')),
+					_('The severity filter is a minimum threshold: choosing a level also shows all more severe levels. To capture DEBUG or TRACE lines, raise the log level on the Settings page.')),
 				E('div', { 'style': 'margin-bottom:4px' }, [_statusEl]),
 				_truncEl,
 				_tableContainer,
