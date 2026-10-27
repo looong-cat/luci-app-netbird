@@ -282,6 +282,9 @@ if [ ! -L "$NB_OPKG_BIN" ] && [ -x "$NB_OPKG_BIN" ]; then
 			uci -q commit netbird_bin 2>/dev/null
 			logger -t "$TAG" "adopt: /usr/bin/netbird($_cur_ver) 收编为 release(软件源记录 ${_pm_ver:-none})"
 		fi
+	elif [ -z "$_cur_ver" ] || [ -z "$_pm_ver" ]; then
+		# 保守跳过分支:记下取不到的是哪一侧,便于排查来源为何没被识别。
+		logger -t "$TAG" "adopt 跳过:版本号取不到(二进制 ${_cur_ver:-空},软件源记录 ${_pm_ver:-空}),来源保持 $(uci -q get netbird_bin.binary.binary_source || echo 未设置)"
 	fi
 fi
 
