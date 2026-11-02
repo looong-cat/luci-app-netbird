@@ -16,6 +16,13 @@ Use the manual `workflow_dispatch` trigger if a rebuild is still desired — not
 includes the install/uninstall scripts under `feed/`, which only reach the site
 through a workflow run.
 
+A `workflow_dispatch` run on any branch other than `main`/`master` only builds and
+signs the packages (kept as workflow artifacts); it never creates a Release or
+deploys. Use it to test workflow changes before merging.
+
+A running release is never cancelled: a newer push to the same branch waits until
+the current run finishes.
+
 ## Changelog
 
 Every release must update `CHANGELOG.md` in the same change set: one entry per

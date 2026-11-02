@@ -2,6 +2,7 @@ name: release
 
 # Push to main/master → build + sign the package feed → deploy to Cloudflare Pages.
 # The package is PKGARCH:=all, so one build per branch covers every architecture.
+# A workflow_dispatch run on any other branch only builds (no Release, no deploy).
 #
 # Required repository secrets:
 #   KEY_BUILD             usign private key (opkg index signing)
@@ -17,9 +18,11 @@ on:
       - ".github/workflows/release.yml"
   workflow_dispatch:
 
+# Never cancel a running release: killing it between "create Release" and "deploy"
+# leaves the GitHub Release ahead of the Pages feed. A newer push waits instead.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -36,7 +39,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build + sign feed
-        uses: openwrt/gh-action-sdk@main
+        # pinned to a commit: this action receives both signing keys
+        uses: openwrt/gh-action-sdk@f5813d30eeef3534b58ac7e79c5d8842b6035434 # main @ 2026-08-04
         env:
           ARCH: x86_64-${{ matrix.branch }}
           FEEDNAME: netbird
@@ -59,6 +63,7 @@ jobs:
   deploy:
     name: deploy to Cloudflare Pages
     needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -168,7 +173,7 @@ jobs:
           gh release upload "$tag" release-assets/* --clobber
 
       - name: Deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
