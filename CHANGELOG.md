@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.1.0-r27 — 2026-11-06
+
+### Fixed
+
+- Settings now take effect on the first connection. After a fresh install or a logout, the first login with a setup key applies the saved settings once, so options such as disabling DNS no longer wait until the Settings page is saved again. Thanks to @gw826943555 ([#15](https://github.com/looong-cat/luci-app-netbird/pull/15)).
+- The **Log level** setting now reaches the running NetBird service without reconnecting, and is restored automatically after the service restarts. This needs NetBird 0.27.4 or newer; older versions stay at info. The Logs tab also recognizes the short level names used by newer clients.
+- On apk systems, the package feed's signing key is kept across firmware upgrades that keep settings, so `apk update` no longer fails signature checks afterwards. The uninstall script removes this entry.
+- Manual binary downloads tolerate slow connections better: a longer connection timeout and retries, detection of stalled transfers, and the actual `curl` error in the failure message.
+- Package upgrades restart the auto-reconnect service, so apk systems no longer keep running the old script until the next reboot.
+
+### Changed
+
+- The Versions tab warns when the configured NetBird-Release binary is missing, for example after a firmware upgrade, and explains how to download it again.
+- `/etc/netbird.env` is no longer created. The NetBird service never read it; an existing file is harmless and is left in place.
+
 ## 0.1.0-r26 — 2026-10-12
 
 ### Added
