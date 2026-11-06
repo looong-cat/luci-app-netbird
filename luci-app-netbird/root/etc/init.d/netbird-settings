@@ -406,6 +406,20 @@ reload_service() {
 		logger -t "$TAG" "not logged in: settings saved; they are applied after the next successful login"
 		return 0
 	fi
+	if printf '%s' "$st" | grep -q 'failed to connect to daemon'; then
+		: > "$NB_SETTINGS_PENDING"
+		logger -t "$TAG" "daemon not responding: settings saved; they are applied after the next successful connection"
+		return 0
+	fi
+	# 登录失败后 daemon 可能显示 Disconnected 或 LoginFailed,和有身份但管理端故障时一样,状态分不出来;
+	# 这时执行 netbird up 又可能进入 SSO 等待。能区分的是连接意图:登录失败或手动断开时已清零,
+	# 有身份的断线仍是 1。意图为 0 且未连接时不发起连接;没有记录过意图时按原逻辑应用。
+	if [ "$(uci -q get netbird.runtime.desired_connected 2>/dev/null)" = "0" ] && \
+		! printf '%s' "$st" | grep -q 'Management: Connected'; then
+		: > "$NB_SETTINGS_PENDING"
+		logger -t "$TAG" "not connected: settings saved; they are applied after the next successful connection"
+		return 0
+	fi
 	rm -f "$NB_SETTINGS_PENDING"
 
 	# 先把 netbird firewall zone 的 device 同步到当前接口名（+ 重载 firewall;设备直绑不动 network），

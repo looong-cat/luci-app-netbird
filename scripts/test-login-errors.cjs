@@ -218,9 +218,61 @@ async function runFrontendCases() {
 	return failed;
 }
 
+// 保存设置的入口:真实 reload_service,只替换 netbird、uci 和系统服务边界。
+const SETTINGS_CASES = [
+	{ name: '未登录', status: 'Daemon status: NeedsLogin', desired: '1', apply: false, pending: true },
+	{ name: '登录失败后(意图已清除,Disconnected)', status: 'Management: Disconnected', desired: '0', apply: false, pending: true },
+	{ name: '登录失败后(意图已清除,LoginFailed)', status: 'Daemon status: LoginFailed', desired: '0', apply: false, pending: true },
+	{ name: '守护进程不可用', status: 'failed to connect to daemon', desired: '1', apply: false, pending: true },
+	{ name: '有身份断线(保持连接)', status: 'Management: Disconnected', desired: '1', apply: true, pending: false },
+	{ name: '有身份且管理端故障(保持连接)', status: 'Daemon status: LoginFailed', desired: '1', apply: true, pending: false },
+	{ name: '已连接(含命令行手动连接)', status: 'Management: Connected', desired: '0', apply: true, pending: false },
+	{ name: '没有记录过连接意图', status: 'Management: Disconnected', desired: '', apply: true, pending: false },
+];
+
+function runSettingsCases() {
+	const init = fs.readFileSync(path.join(PKG, 'root/etc/init.d/netbird-settings'), 'utf8')
+		.replace(/^\s*\. \/usr\/share\/netbird\/.*$/gm, ':');
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-settings-test-'));
+	let failed = 0;
+	try {
+		const file = path.join(dir, 'settings.sh');
+		fs.writeFileSync(file, init + `
+NB_SERVICE=/nonexistent-netbird-test-service
+NB_SETTINGS_PENDING="$TEST_PENDING"
+NB_SETTINGS_APPLIED="$TEST_APPLIED"
+_resolve_bin() { printf '/fake/netbird'; }
+_bool() { return 0; }
+_get() { printf 'wt0'; }
+uci() { [ "$*" = '-q get netbird.runtime.desired_connected' ] && printf '%s' "$TEST_DESIRED"; }
+logger() { :; }
+sleep() { :; }
+nb_run_bounded() { printf '%s\\n' "$TEST_STATUS"; }
+nb_sync_log_level() { :; }
+_sync_openwrt_zone_device() { :; }
+_render_and_apply() { printf 'REACHED_APPLY\\n'; }
+reload_service
+`);
+		SETTINGS_CASES.forEach((c, i) => {
+			const pending = path.join(dir, 'pending' + i);
+			const out = execFileSync('/bin/sh', [file], { encoding: 'utf8', env: Object.assign({}, process.env,
+				{ TEST_STATUS: c.status, TEST_DESIRED: c.desired, TEST_PENDING: pending, TEST_APPLIED: path.join(dir, 'applied' + i) }) });
+			const applied = out.includes('REACHED_APPLY');
+			const left = fs.existsSync(pending);
+			const good = applied === c.apply && left === c.pending;
+			console.log((good ? 'ok   ' : 'FAIL ') + '保存设置:' + c.name + (good ? '' : ': apply=' + applied + ' pending=' + left));
+			if (!good) failed++;
+		});
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+	return failed;
+}
+
 (async () => {
 	let failed = checkBackendCases(runBackendCases());
 	failed += await runFrontendCases();
+	failed += runSettingsCases();
 	if (failed) {
 		console.error(failed + ' 项失败');
 		process.exit(1);
