@@ -733,7 +733,7 @@ function _read_daemon_logs(limit) {
 function _line_mentions_auth_problem(line) {
     if (line == null || length(line) == 0)
         return false;
-    return !!match(line, /setup key|peer auth method|PermissionDenied|Unauthenticated|code\s*=\s*NotFound|couldn't add peer|login has expired|peer not found|removed from network/i);
+    return !!match(line, /setup[ -]key|peer auth method|PermissionDenied|Unauthenticated|code\s*=\s*NotFound|couldn't add peer|login has expired|peer not found|removed from network/i);
 }
 
 // _recent_auth_log_text() → { text, hits }
@@ -768,14 +768,14 @@ function _classify_auth_failure(text) {
     if (text == null || length(text) == 0)
         return null;
 
-    if (match(text, /setup key is invalid|invalid setup key|setup key.*(expired|revoked|disabled|usage limit|not found|already used)|couldn't add peer:\s*setup key/i)) {
+    if (match(text, /setup[ -]key is invalid|invalid setup[ -]key|setup[ -]key.*(expired|revoked|disabled|usage limit|not found|already used)|couldn't add peer:\s*setup[ -]key/i)) {
         return {
             message: 'Authentication failed: the setup key was rejected by the NetBird management server.',
             hint: 'NetBird was stopped to avoid retrying forever. Generate a new setup key and connect again.',
         };
     }
 
-    if (match(text, /no peer auth method provided|please use a setup key|setup key.*missing/i)) {
+    if (match(text, /no peer auth method provided|please use a setup[ -]key|setup[ -]key.*missing/i)) {
         return {
             message: 'Authentication failed: NetBird did not receive a valid setup key.',
             hint: 'NetBird was stopped to avoid retrying forever. Enter a new setup key and connect — re-registering does not require deregistering first, even if the server was rebuilt or this device was removed there.',
@@ -799,6 +799,28 @@ function _classify_auth_failure(text) {
     return null;
 }
 
+// _lines_added_since(before_text, after_text) → 本次尝试新增的日志行。
+// 按行做多重集合差:before 出现过的行逐条抵消,超出 before 计数的行才算新增,
+// 重复行的真新增仍能识别;日志窗口滑动或乱序也不受影响。
+function _lines_added_since(before_text, after_text) {
+    let before_count = {};
+    for (let l in split(before_text || '', '\n')) {
+        if (length(l) == 0)
+            continue;
+        before_count[l] = (before_count[l] != null ? before_count[l] : 0) + 1;
+    }
+    let added = '';
+    for (let l in split(after_text || '', '\n')) {
+        if (length(l) == 0)
+            continue;
+        if (before_count[l] != null && before_count[l] > 0)
+            before_count[l] = before_count[l] - 1;
+        else
+            added += l + '\n';
+    }
+    return added;
+}
+
 // _auth_failure_from_attempt(stdout, before_text) → { message, hint } | null
 // CLI 输出直接命中立即采信；日志只看本次尝试后新增的认证片段，避免旧错误污染。
 function _auth_failure_from_attempt(stdout, before_text) {
@@ -806,39 +828,30 @@ function _auth_failure_from_attempt(stdout, before_text) {
     if (direct != null)
         return direct;
 
-    // 只看本次尝试"新增"的认证日志行:对 before/after 按行做多重集合差。
-    // 旧实现用字节前缀差分,在认证日志撑爆 4096B 尾截断窗口时会失效、回退全量分类,
-    // 导致陈旧 fatal 行污染本次归因。集合差对截断/乱序稳健:before 出现过的行逐条抵消,
-    // 仅把"超出 before 计数"的行算作本次新增(重复行的真新增仍能识别)。
-    let after_text = _recent_auth_log_text().text;
-    let before_count = {};
-    for (let l in split(before_text || '', '\n')) {
-        if (length(l) == 0)
-            continue;
-        before_count[l] = (before_count[l] != null ? before_count[l] : 0) + 1;
-    }
-    let new_text = '';
-    for (let l in split(after_text || '', '\n')) {
-        if (length(l) == 0)
-            continue;
-        if (before_count[l] != null && before_count[l] > 0)
-            before_count[l] = before_count[l] - 1;
-        else
-            new_text += l + '\n';
-    }
+    let new_text = _lines_added_since(before_text, _recent_auth_log_text().text);
     if (_count_auth_hits(new_text) >= 1)
         return _classify_auth_failure(new_text);
     return null;
 }
 
+// 不做字节尾截断:截断会切出半行,破坏 _lines_added_since 的按行差分;行数已由 limit 限定。
 function _recent_log_text(limit) {
-    let src = _read_daemon_logs(limit || 80);
+    let src = _read_daemon_logs(limit || 100);
     let text = '';
     for (let line in (src.lines || []))
         text += line + '\n';
-    if (length(text) > 4096)
-        text = substr(text, length(text) - 4096);
     return text;
+}
+
+// _strip_local_ipc_lines(text) — 去掉 CLI 与本机 daemon 之间 gRPC 的日志行。
+// 这些行里也有 transport is closing、Unavailable 等字样,但说明不了管理服务器是否可达。
+function _strip_local_ipc_lines(text) {
+    let kept = '';
+    for (let l in split(text || '', '\n')) {
+        if (length(l) > 0 && !match(l, /Server\.processUnaryRPC|dial unix |unix:\/\/|netbird\.sock|failed to connect to daemon/))
+            kept += l + '\n';
+    }
+    return kept;
 }
 
 function _classify_transient_connect_failure(text) {
@@ -3080,6 +3093,7 @@ function _do_up(req) {
         _mark_settings_pending();
 
     let auth_log_before = _recent_auth_log_text().text;
+    let log_before = _recent_log_text(100);
     let cmd = _build_auth_cmd(bin, 'up', mr.url, setup_key);
     // watchdog 的周期重连用短墙钟 + 短确认轮询:管理端不可达时 netbird up 内部
     // backoff 不返回,每次尝试都会跑满墙钟;同脚本 RPC 串行使状态页在此期间排队,
@@ -3150,7 +3164,9 @@ function _do_up(req) {
     }
     // 先分类 transient(管理端不可达/DNS/连接拒绝/超时),拿到比泛化超时更可定位的原因;
     // 两条路径都复用它,带 key 路径不再丢失具体原因。
-    let transient = _classify_transient_connect_failure((r.stdout || '') + '\n' + _recent_log_text(80));
+    // 只认本次尝试的输出和新增日志,旧日志里的网络错误不算这次失败的原因;判断不了就给中性结果。
+    let transient = _classify_transient_connect_failure(_strip_local_ipc_lines(
+        (r.stdout || '') + '\n' + _lines_added_since(log_before, _recent_log_text(100))));
     if (!reconnect_with_existing_identity) {
         // 带 setup key 的首连超时(非 fatal):netbird daemon 仍会在后台用该 key 续试注册,
         // 前端已判失败 → 显式 down 停住后台续试,并清 desired_connected:该位可能早被之前的
