@@ -203,8 +203,10 @@ if [ -f /etc/init.d/luci-netbird-watchdog ]; then
 		chmod 0755 /usr/share/netbird/netbird-autoreconnect.sh
 	/etc/init.d/luci-netbird-watchdog enable 2>/dev/null || \
 		logger -t "$TAG" "警告：luci-netbird-watchdog enable 失败"
-	/etc/init.d/luci-netbird-watchdog start 2>/dev/null || \
-		logger -t "$TAG" "警告：luci-netbird-watchdog start 失败"
+	# 用 restart 而不是 start:apk 升级不会停掉运行中的 watchdog,start 对已在运行的实例不起作用,
+	# 旧脚本会一直跑到下次重启。
+	/etc/init.d/luci-netbird-watchdog restart 2>/dev/null || \
+		logger -t "$TAG" "警告：luci-netbird-watchdog restart 失败"
 fi
 
 # ── 二进制来源管理:存储目录 + sysupgrade 保全 + 遗留态 adopt ─────────────────────
