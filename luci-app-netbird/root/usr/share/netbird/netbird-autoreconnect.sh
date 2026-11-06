@@ -123,6 +123,21 @@ _is_transient_disconnect() {
 	_match "$1" 'Management:[[:space:]]*Disconnected|Unavailable|DeadlineExceeded|connection refused|i/o timeout|network is unreachable|no such host|temporary failure|TLS handshake timeout|context deadline exceeded|keepalive ping failed|transport is closing|connection reset|timeout after'
 }
 
+# 连接不是经 do_up 建立时(命令行手动连接、daemon 自行恢复),没有别的入口处理待应用标记。
+# 连续 4 轮(90 秒以上)已连接且标记仍在才应用,避开 do_up 正在等待确认、稍后会自行补应用的窗口。
+pending_rounds=0
+_maybe_apply_pending_settings() {
+	if [ ! -f /etc/netbird-settings.pending ]; then
+		pending_rounds=0
+		return 0
+	fi
+	pending_rounds=$((pending_rounds + 1))
+	[ "$pending_rounds" -lt 4 ] && return 0
+	pending_rounds=0
+	_log "connected with pending settings; applying them"
+	/etc/init.d/netbird-settings reload >/dev/null 2>&1
+}
+
 _attempt_reconnect() {
 	_log "management disconnected; trying do_up with existing identity"
 	out="$(ubus -t 90 call luci.netbird do_up '{"management_url":"","setup_key":"","caller":"watchdog"}' 2>&1)"
@@ -196,9 +211,11 @@ while :; do
 		attempt_wait=0
 		last_unknown=""
 		_maybe_restore_exit_node
+		_maybe_apply_pending_settings
 		_sleep "$INTERVAL"
 		continue
 	fi
+	pending_rounds=0
 
 	# 服务在设置里被关闭(netbird-settings 已 down+stop+disable)时不重连;不改写期望连接位,
 	# 重新启用服务后自动恢复。

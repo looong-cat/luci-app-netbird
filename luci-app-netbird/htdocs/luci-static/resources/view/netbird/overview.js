@@ -110,21 +110,25 @@ function exceptionMessage(e, timeoutMsg) {
 function runAction(btn, promise, okMsg, failMsg, timeoutMsg, onFailure) {
 	btn.classList.add('spinning');
 	btn.disabled = true;
+	// 按钮等刷新结束再恢复:刷新会替换页面,提前恢复可能让第二次提交被刷新结果覆盖。
+	function settle() {
+		var restore = function () {
+			btn.classList.remove('spinning');
+			btn.disabled = false;
+		};
+		return Promise.resolve().then(onFailure).then(restore, restore);
+	}
 	return promise.then(function (res) {
 		if (res && res.ok) {
 			ui.addNotification(null, E('p', {}, okMsg), 'info');
 			window.setTimeout(function () { location.reload(); }, 800);
 		} else {
 			ui.addNotification(null, E('p', {}, responseMessage(res, failMsg)), 'error');
-			btn.classList.remove('spinning');
-			btn.disabled = false;
-			return onFailure ? onFailure() : null;
+			return settle();
 		}
-	}).catch(function (e) {
+	}, function (e) {
 		ui.addNotification(null, E('p', {}, exceptionMessage(e, timeoutMsg)), 'error');
-		btn.classList.remove('spinning');
-		btn.disabled = false;
-		return onFailure ? onFailure() : null;
+		return settle();
 	});
 }
 
@@ -294,7 +298,8 @@ return view.extend({
 		return runAction(ev.currentTarget,
 				self._withRpcTimeout(90, function () { return callDoReconnect(); }),
 			_('NetBird reconnected.'), _('Operation failed.'),
-			_('NetBird is still reconnecting, or the connection to this page was interrupted, which is expected when this page is opened over NetBird. The router finishes reconnecting on its own: reload this page in a few seconds, and check the Logs tab if it is still disconnected.'));
+			_('NetBird is still reconnecting, or the connection to this page was interrupted, which is expected when this page is opened over NetBird. The router finishes reconnecting on its own: reload this page in a few seconds, and check the Logs tab if it is still disconnected.'),
+			function () { return self.refreshAfterFailure(); });
 	},
 
 	// 「注销/登出」回调：二次确认（警告会删本机身份）后 do_logout。

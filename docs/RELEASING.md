@@ -46,3 +46,12 @@ The workflow verifies that the ipk and apk builds report the same version. It th
 
 Always bump `PKG_RELEASE` in `luci-app-netbird/Makefile` for a code change that
 should ship as a new package revision.
+
+## Checks before releasing
+
+The workflow does not run these. Run them locally (needs `node` and `ucode`) whenever
+login, connection or settings code changes:
+
+```sh
+node scripts/test-login-errors.cjs
+```

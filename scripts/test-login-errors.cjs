@@ -28,7 +28,7 @@ function extract(name) {
 	return m ? m[0] : '';
 }
 
-const FUNCTIONS = ['_line_mentions_auth_problem', '_recent_auth_log_text', '_count_auth_hits', '_classify_auth_failure',
+const FUNCTIONS = ['_line_mentions_auth_problem', '_classify_auth_failure',
 	'_lines_added_since', '_strip_local_ipc_lines', '_auth_failure_from_attempt', '_recent_log_text',
 	'_classify_transient_connect_failure', '_cli_immediate_error', '_do_up'];
 
@@ -77,6 +77,9 @@ const BACKEND_CASES = [
 	{ name: '有效 key 的早期失败日志不影响成功', key: 'k', after: [NEW_KEY_ERROR], stdout: '', code: 0, connected: true, success: true },
 	{ name: '已有身份重连:本次连接拒绝', key: '', after: [REMOTE_REFUSED], want: UNREACHABLE, keepsDesired: true },
 	{ name: '已有身份重连:旧连接拒绝给中性结果', key: '', before: [REMOTE_REFUSED], after: [], want: NEUTRAL, keepsDesired: true },
+	{ name: 'watchdog 无新证据时不覆盖上次原因', key: '', caller: 'watchdog', after: [], want: NEUTRAL, keepsDesired: true, keepsSaved: true },
+	{ name: 'CLI 读本地服务断开不算管理端不可达', key: 'k', after: [], stdout: 'rpc error: code = Unavailable desc = error reading from server: EOF', code: 1, want: NEUTRAL },
+	{ name: 'CLI 等本地服务超时不算管理端不可达', key: 'k', after: [], stdout: 'rpc error: code = DeadlineExceeded desc = context deadline exceeded', code: 1, want: NEUTRAL },
 	{ name: '已有身份重连:成功', key: '', after: [], stdout: '', code: 0, connected: true, success: true },
 ];
 
@@ -88,7 +91,7 @@ let cases = ${JSON.stringify(BACKEND_CASES)};
 for (let c in cases) {
 	logs = [ ...(c.before || []) ]; fresh = c.after || []; polls = 0; downs = 0; saved = ''; desired = null;
 	cli = { code: c.code, stdout: c.stdout }; connected = !!c.connected; status_text = null;
-	let r = _do_up({ args: { setup_key: c.key } });
+	let r = _do_up({ args: { setup_key: c.key, caller: c.caller } });
 	printf('%J\\n', { name: c.name, ok: r.ok, message: r.message, saved, polls, downs, desired });
 }
 `;
@@ -113,7 +116,7 @@ function checkBackendCases(results) {
 			if (!r.ok) problem = '应成功,实际: ' + r.message;
 		} else if (r.ok || !String(r.message).startsWith(c.want)) {
 			problem = '期望「' + c.want + '」,实际「' + r.message + '」';
-		} else if (r.saved !== r.message) {
+		} else if (c.keepsSaved ? r.saved !== '' : r.saved !== r.message) {
 			problem = '持久化的错误和返回不一致';
 		} else if (c.polls != null && r.polls !== c.polls) {
 			problem = '轮询次数 ' + r.polls;
@@ -145,6 +148,7 @@ function loadPage(sample, env) {
 			return { ok: true, data: { last_error: env.lastError, management_url: 'https://stale.invalid' } };
 		case 'get_binary_info': return { ok: true, data: {} };
 		case 'get_connection_info': return { ok: true, data: { management: { connected: false } } };
+		case 'do_reconnect':
 		case 'do_up':
 			env.state = 'needs_login';
 			env.lastError = (sample.response && sample.response.message) || '';
@@ -160,7 +164,7 @@ function loadPage(sample, env) {
 	return page;
 }
 
-async function runFrontendCase(sample) {
+async function runFrontendCase(sample, action) {
 	const env = { statusReads: 0, notices: [], timers: [], reloads: 0, state: 'service_disabled', lastError: '', replaced: 0,
 		fields: {} };
 	const root = { parentNode: { replaceChild: () => { env.replaced++; } } };
@@ -169,10 +173,17 @@ async function runFrontendCase(sample) {
 	page._nbAuthState = (await page.load()).state;
 	const rendered = [];
 	const realRender = page.render;
-	page.render = function (data) { rendered.push(data); return realRender.call(this, data); };
+	page.render = function (data) {
+		rendered.push(data);
+		if (sample.renderThrows) throw new Error('render failed');
+		return realRender.call(this, data);
+	};
 	const btn = { disabled: true, classList: { add() {}, remove() {} } };
-	await page.handleConnect({ currentTarget: btn });
-	return { env, rendered, btn, state: page._nbAuthState };
+	const pending = page[action || 'handleConnect']({ currentTarget: btn });
+	await Promise.resolve();
+	const disabledDuringRefresh = btn.disabled;
+	await pending;
+	return { env, rendered, btn, state: page._nbAuthState, disabledDuringRefresh };
 }
 
 async function runFrontendCases() {
@@ -208,6 +219,17 @@ async function runFrontendCases() {
 	check('刷新失败时显示未知,不沿用旧状态', () => {
 		assert.equal(refreshFails.rendered[0].state, 'unknown');
 		assert(JSON.stringify(refreshFails.env.notices).includes('XHR request aborted by browser'));
+	});
+	check('刷新结束前按钮保持禁用', () => assert.equal(failure.disabledDuringRefresh, true));
+	const reconnect = await runFrontendCase({ response: { ok: false, message } }, 'handleReconnect');
+	check('重连失败后同样刷新状态', () => {
+		assert.equal(reconnect.env.statusReads, 2);
+		assert.equal(reconnect.rendered[0].state, 'needs_login');
+	});
+	const renderThrows = await runFrontendCase({ response: { ok: false, message }, renderThrows: true });
+	check('刷新出错时只留原通知,按钮恢复', () => {
+		assert.equal(renderThrows.env.notices.length, 1);
+		assert.equal(renderThrows.btn.disabled, false);
 	});
 	const success = await runFrontendCase({ response: { ok: true, data: { connected: true } } });
 	check('成功时仍计划整页刷新,不额外重绘', () => {

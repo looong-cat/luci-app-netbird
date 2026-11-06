@@ -4,6 +4,7 @@
 'require form';
 'require ui';
 'require uci';
+'require rpc';
 
 // 设置 Tab —— form.Map 对标 OPNsense 设置页分组。
 //
@@ -63,6 +64,8 @@ var PresharedKey = form.Value.extend({
 		/* 留空不删除已存密钥（write-only 语义） */
 	}
 });
+
+var callAuthInfo = rpc.declare({ object: 'luci.netbird', method: 'get_auth_info' });
 
 return view.extend({
 	render: function () {
@@ -259,6 +262,18 @@ return view.extend({
 		// 标准 Save & Apply（form.Map 默认页脚「保存并应用/保存/复位」）会写 UCI → commit
 		// → 经 procd reload trigger 自动应用（netbird-settings service_triggers 注册
 		// procd_add_reload_trigger "netbird"，见 build-and-test §7）。无自定义 apply 按钮。
-		return m.render();
+		// 未连接时保存的设置要等下次连接成功才应用,在这里说明,避免以为已经生效。
+		return Promise.all([
+			m.render(),
+			L.resolveDefault(callAuthInfo(), {})
+		]).then(function (res) {
+			if (!(res[1] && res[1].ok && res[1].data && res[1].data.settings_pending))
+				return res[0];
+			return E('div', {}, [
+				E('div', { 'class': 'alert-message warning' },
+					_('Saved settings are not active yet. They will be applied the next time NetBird connects.')),
+				res[0]
+			]);
+		});
 	}
 });

@@ -1217,3 +1217,6 @@ msgstr "详情"
 
 msgid "The configured source is NetBird-Release, but its binary is not on this device (it is not kept across firmware upgrades, or the automatic download did not finish), so another build is running. Select NetBird-Release below, click \"Check for updates\", then \"Update now\". On a slow connection, you can use a mirror URL under \"Custom download\"."
 msgstr "配置的来源是 NetBird-Release，但本机没有它的二进制（刷机升级不保留，或首次连接时的自动下载没有完成），当前运行的是其他版本。请在下方选择 NetBird-Release，点击「检测更新」，再点「立即更新」；网络较慢时可以在「自定义下载」里使用镜像地址。"
+
+msgid "Saved settings are not active yet. They will be applied the next time NetBird connects."
+msgstr "已保存的设置尚未生效，将在 NetBird 下次连接成功后应用。"

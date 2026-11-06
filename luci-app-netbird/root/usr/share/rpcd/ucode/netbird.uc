@@ -736,32 +736,6 @@ function _line_mentions_auth_problem(line) {
     return !!match(line, /setup[ -]key|peer auth method|PermissionDenied|Unauthenticated|code\s*=\s*NotFound|couldn't add peer|login has expired|peer not found|removed from network/i);
 }
 
-// _recent_auth_log_text() → { text, hits }
-// 仅用于 do_up/do_login 失败归因。要求日志命中数达到阈值才按日志判定，降低旧日志误报。
-function _recent_auth_log_text() {
-    let src = _read_daemon_logs(100);
-    let text = '';
-    let hits = 0;
-    for (let line in (src.lines || [])) {
-        if (_line_mentions_auth_problem(line)) {
-            hits++;
-            text += line + '\n';
-        }
-    }
-    // 不按字节尾截断:源已限 100 行,过滤后认证行很少;尾截断会破坏
-    // _auth_failure_from_attempt 的"本次新增行"差分,保留完整文本。
-    return { text: text, hits: hits };
-}
-
-function _count_auth_hits(text) {
-    let hits = 0;
-    for (let line in split(text || '', '\n')) {
-        if (_line_mentions_auth_problem(line))
-            hits++;
-    }
-    return hits;
-}
-
 // _classify_auth_failure(text) → { message, hint } | null
 // 按 NetBird CLI/daemon 原生错误语义归类；不伪造“未知错误”。
 function _classify_auth_failure(text) {
@@ -821,17 +795,18 @@ function _lines_added_since(before_text, after_text) {
     return added;
 }
 
-// _auth_failure_from_attempt(stdout, before_text) → { message, hint } | null
-// CLI 输出直接命中立即采信；日志只看本次尝试后新增的认证片段，避免旧错误污染。
-function _auth_failure_from_attempt(stdout, before_text) {
+// _auth_failure_from_attempt(stdout, log_before, log_after) → { message, hint } | null
+// CLI 输出直接命中立即采信;日志只看本次尝试新增的认证相关行,避免旧错误污染。
+function _auth_failure_from_attempt(stdout, log_before, log_after) {
     let direct = _classify_auth_failure(stdout || '');
     if (direct != null)
         return direct;
-
-    let new_text = _lines_added_since(before_text, _recent_auth_log_text().text);
-    if (_count_auth_hits(new_text) >= 1)
-        return _classify_auth_failure(new_text);
-    return null;
+    let new_text = '';
+    for (let l in split(_lines_added_since(log_before, log_after), '\n')) {
+        if (_line_mentions_auth_problem(l))
+            new_text += l + '\n';
+    }
+    return (length(new_text) > 0) ? _classify_auth_failure(new_text) : null;
 }
 
 // 不做字节尾截断:截断会切出半行,破坏 _lines_added_since 的按行差分;行数已由 limit 限定。
@@ -848,7 +823,7 @@ function _recent_log_text(limit) {
 function _strip_local_ipc_lines(text) {
     let kept = '';
     for (let l in split(text || '', '\n')) {
-        if (length(l) > 0 && !match(l, /Server\.processUnaryRPC|dial unix |unix:\/\/|netbird\.sock|failed to connect to daemon/))
+        if (length(l) > 0 && !match(l, /Server\.processUnaryRPC|dial unix |unix:\/\/|netbird\.sock|failed to connect to daemon|error reading from server|code = DeadlineExceeded desc = context deadline exceeded/))
             kept += l + '\n';
     }
     return kept;
@@ -3092,7 +3067,6 @@ function _do_up(req) {
     if (length(setup_key) > 0 && !access(_NB_SETTINGS_APPLIED, 'f'))
         _mark_settings_pending();
 
-    let auth_log_before = _recent_auth_log_text().text;
     let log_before = _recent_log_text(100);
     let cmd = _build_auth_cmd(bin, 'up', mr.url, setup_key);
     // watchdog 的周期重连用短墙钟 + 短确认轮询:管理端不可达时 netbird up 内部
@@ -3115,7 +3089,7 @@ function _do_up(req) {
     // PermissionDenied/no peer auth method 之类瞬时行，仅凭日志归因会误杀。
     let cli_timed_out = !!match(r.stdout || '', /netbird command timed out after/);
     if (cli_timed_out) {
-        let early_auth = _auth_failure_from_attempt(r.stdout || '', auth_log_before);
+        let early_auth = _auth_failure_from_attempt(r.stdout || '', log_before, _recent_log_text(100));
         if (early_auth != null) {
             setup_key = '';
             _exec_short_verb(bin, 'down');
@@ -3155,7 +3129,8 @@ function _do_up(req) {
         });
     }
     setup_key = '';  // 超时分支同样清零瞬时密钥（密钥绝不入 UCI）
-    let auth = _auth_failure_from_attempt(r.stdout || '', auth_log_before);
+    let log_after = _recent_log_text(100);
+    let auth = _auth_failure_from_attempt(r.stdout || '', log_before, log_after);
     if (auth != null) {
         _exec_short_verb(bin, 'down');
         _set_desired_connected(false);
@@ -3166,7 +3141,7 @@ function _do_up(req) {
     // 两条路径都复用它,带 key 路径不再丢失具体原因。
     // 只认本次尝试的输出和新增日志,旧日志里的网络错误不算这次失败的原因;判断不了就给中性结果。
     let transient = _classify_transient_connect_failure(_strip_local_ipc_lines(
-        (r.stdout || '') + '\n' + _lines_added_since(log_before, _recent_log_text(100))));
+        (r.stdout || '') + '\n' + _lines_added_since(log_before, log_after)));
     if (!reconnect_with_existing_identity) {
         // 带 setup key 的首连超时(非 fatal):netbird daemon 仍会在后台用该 key 续试注册,
         // 前端已判失败 → 显式 down 停住后台续试,并清 desired_connected:该位可能早被之前的
@@ -3185,7 +3160,9 @@ function _do_up(req) {
         _persist_runtime_error(transient.message);
         return err(CODE.CONNECT_FAILED, transient.message, transient.hint);
     }
-    _persist_runtime_error('NetBird did not become connected before the timeout.');
+    // watchdog 的尝试窗口只有 10s,没有新证据时不覆盖上次的具体原因(如管理服务器不可达)。
+    if (!from_watchdog)
+        _persist_runtime_error('NetBird did not become connected before the timeout.');
     return err(CODE.CONNECT_FAILED,
         'NetBird did not become connected before the timeout.',
         'Check the Logs tab for the last NetBird message, then try again.');
@@ -3343,6 +3320,7 @@ return {
                 return ok({
                     management_url:  _resolve_display_mgmt_url(),
                     setup_key_hint:  (type(hint) == 'string') ? hint : '',
+                    settings_pending: !!access(_NB_SETTINGS_PENDING, 'f'),
                     last_error:      (type(c.get('netbird', 'runtime', 'last_error')) == 'string') ? c.get('netbird', 'runtime', 'last_error') : '',
                 });
             }),
@@ -3486,7 +3464,7 @@ return {
                 if (bin == null)
                     return err(CODE.NOT_INSTALLED, 'The netbird binary is not installed.');
 
-                let auth_log_before = _recent_auth_log_text().text;
+                let log_before = _recent_log_text(100);
                 let cmd = _build_auth_cmd(bin, 'login', mr.url, setup_key);
                 let r = _exec_auth_cmd(cmd, 4096); // shell-audit-ok: bin/url/key 均经 shell_quote，verb 字面
                 // 安全加固：若 CLI 把 setup_key 回显进 stdout，先脱敏再用于任何错误回传。
@@ -3499,6 +3477,9 @@ return {
                         _persist_setup_key_hint(setup_key);
                     setup_key = '';  // 立即清零瞬时密钥（密钥绝不入 UCI）
                     _clear_runtime_error();
+                    // 应用设置需要连接意图为 1,否则 netbird-settings 只会把标记重新写回。
+                    if (access(_NB_SETTINGS_PENDING, 'f'))
+                        _set_desired_connected(true);
                     _apply_pending_settings();
                     return ok({ logged_in: true });
                 }
@@ -3508,7 +3489,7 @@ return {
                     _persist_runtime_error(immediate.message);
                     return err(CODE.CONNECT_FAILED, immediate.message, immediate.hint);
                 }
-                let auth = _auth_failure_from_attempt(r.stdout || '', auth_log_before);
+                let auth = _auth_failure_from_attempt(r.stdout || '', log_before, _recent_log_text(100));
                 if (auth != null) {
                     _exec_short_verb(bin, 'down');
                     _set_desired_connected(false);

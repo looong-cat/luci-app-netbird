@@ -1673,3 +1673,6 @@ msgstr ""
 
 msgid "The configured source is NetBird-Release, but its binary is not on this device (it is not kept across firmware upgrades, or the automatic download did not finish), so another build is running. Select NetBird-Release below, click \"Check for updates\", then \"Update now\". On a slow connection, you can use a mirror URL under \"Custom download\"."
 msgstr ""
+
+msgid "Saved settings are not active yet. They will be applied the next time NetBird connects."
+msgstr ""
