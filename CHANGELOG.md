@@ -3,7 +3,21 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.1.0-r27 — 2026-11-06
+## 0.2.0-r1 — 2026-11-06
+
+This release starts the `0.2` series after the features added across `0.1.0-r2` to `r27`. Upgrades from `0.1.0` work normally.
+
+### Fixed
+
+- Login failures now report the real cause. A setup key rejected in the newer `setup-key` log format is shown as rejected, and earlier log lines or a closed connection between the command line and the local NetBird service no longer appear as "The management server is temporarily unreachable."
+- After a failed connect or reconnect, the Authentication page updates its status and last error in place. The notification and the management URL you entered stay on the page. If the status cannot be read, the page shows Unknown instead of the old state.
+- Saving settings after a failed login no longer starts an SSO wait that could hold up other configuration reloads on the router for up to 45 seconds.
+
+### Changed
+
+- If you saved settings after disconnecting or after a failed login, they now apply on the next successful connection instead of reconnecting right away. The Settings page shows a notice while settings are waiting. Connections made outside LuCI, such as `netbird up`, pick up waiting settings after about two minutes.
+
+
 
 ### Fixed
 

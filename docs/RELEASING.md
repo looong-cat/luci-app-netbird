@@ -44,8 +44,16 @@ The workflow verifies that the ipk and apk builds report the same version. It th
 - uploads the ipk/apk packages and `manifest.json` as release assets
 - deploys the signed feed and landing page to Cloudflare Pages
 
-Always bump `PKG_RELEASE` in `luci-app-netbird/Makefile` for a code change that
-should ship as a new package revision.
+Always bump the version in `luci-app-netbird/Makefile` for a code change that should
+ship:
+
+- A new feature or a behavior change users will notice: increase the middle number of
+  `PKG_VERSION` and reset the last number to 0.
+- Anything else, such as bug fixes and translations: increase the last number of
+  `PKG_VERSION`.
+
+`PKG_RELEASE` stays 1. Installed versions of this package expect the `x.y.z-rN` form when
+they check for updates, so removing the suffix would stop them from finding new versions.
 
 ## Checks before releasing
 
