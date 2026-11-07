@@ -7,8 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- On OpenWrt 22.03 and 23.05, updating this app from its own page no longer reports a failure after the update has already succeeded. The update to this version can still show the old message once, because the new install step only takes effect from this version on.
-- Rosenpass settings work again on NetBird 0.82 and newer. NetBird deprecated these options and hid them from its help output, so the app had stopped applying them without saying so. The Settings page now notes the deprecation.
+- On OpenWrt 22.03 and 23.05, updating this app from its own page no longer reports a failure after the update has already succeeded.
+- Rosenpass settings apply again on NetBird 0.82, which deprecated these options and hid them from its help output. The app had stopped applying them without saying so. If a later NetBird version removes the options, the app skips them. The Settings page now notes the deprecation.
 
 ## 0.2.0-r1 — 2026-11-06
 

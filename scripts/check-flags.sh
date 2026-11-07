@@ -44,7 +44,8 @@ SKIP_OPERATIONAL="--admin-url --anonymize --anonymize-level --config --daemon-ad
 #   --enable-local-metrics --local-metrics-address     本机 metrics 端点,路由器场景价值低
 SKIP_OMITTED="--mtu --external-ip-map --extra-dns-labels --extra-iface-blacklist --dns-router-interval --ssh-jwt-cache-ttl --network-monitor --disable-auto-connect --enable-lazy-connection --dns-resolver-address --enable-local-metrics --local-metrics-address"
 SKIP=" $SKIP_OPERATIONAL $SKIP_OMITTED "
-# 上游标记为废弃、从 help 隐藏但仍可用的 flag(netbird-settings 用 _accepts_bool_flag 实际探测):
+# 上游标记为废弃、从 help 隐藏的 flag(netbird-settings 用 _accepts_bool_flag 实际探测)。
+# 有二进制时同样实际探测;只有 help 文本时分不清隐藏和移除,单独列出:
 HIDDEN_DEPRECATED=" --enable-rosenpass --rosenpass-permissive "
 
 # ── 取 `netbird up --help` 文本 ───────────────────────────────────────────────
@@ -89,9 +90,17 @@ for f in $AVAIL; do
 done
 
 GONE=""
+UNSURE=""
+PROBE_BIN="${1:-${NETBIRD:-$(command -v netbird 2>/dev/null || true)}}"
 for f in $MAPPED; do
 	in_list "$f" "$AVAIL_SP" && continue
-	in_list "$f" "$HIDDEN_DEPRECATED" && continue
+	if in_list "$f" "$HIDDEN_DEPRECATED"; then
+		if [ -n "${NB_HELP_FILE:-}" ]; then
+			UNSURE="$UNSURE $f"
+			continue
+		fi
+		"$PROBE_BIN" up --help "$f=false" >/dev/null 2>&1 && continue
+	fi
 	GONE="$GONE $f"
 done
 
@@ -110,6 +119,11 @@ else
 	echo "✅ 无未映射的新 flag(上游 flag 均已映射或在已知跳过清单)。"
 fi
 echo
+if [ -n "$UNSURE" ]; then
+	echo "❓ help 里没有,可能已隐藏或已移除(离线模式无法区分,请用二进制再跑一次):"
+	for f in $UNSURE; do echo "     $f"; done
+	echo
+fi
 if [ -n "$GONE" ]; then
 	echo "⚠️ 插件映射了、但此二进制没有此 flag:"
 	echo "   (跑旧版二进制属正常 —— init.d 能力门控会静默跳过;若在最新版出现 = flag 被重命名/移除,需跟进)"
