@@ -228,7 +228,7 @@ return view.extend({
 		s.tab('postquantum', _('Post-Quantum'));
 
 		o = s.taboption('postquantum', form.Flag, 'rosenpass_enabled', _('Enable Rosenpass'),
-			_('Post-quantum secure the connection via Rosenpass (experimental).'));
+			_('Post-quantum secure the connection via Rosenpass (experimental). NetBird has deprecated Rosenpass and may remove it in a future release.'));
 		o.default = '0';
 		o.rmempty = false;
 

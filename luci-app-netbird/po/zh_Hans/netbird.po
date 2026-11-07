@@ -425,8 +425,8 @@ msgstr "对等节点"
 msgid "Post-Quantum"
 msgstr "后量子"
 
-msgid "Post-quantum secure the connection via Rosenpass (experimental)."
-msgstr "通过 Rosenpass 进行后量子安全加固（实验性）。"
+msgid "Post-quantum secure the connection via Rosenpass (experimental). NetBird has deprecated Rosenpass and may remove it in a future release."
+msgstr "通过 Rosenpass 进行后量子安全加固（实验性）。NetBird 已废弃 Rosenpass，未来版本可能移除。"
 
 msgid "Process"
 msgstr "进程"

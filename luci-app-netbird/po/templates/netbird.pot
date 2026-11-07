@@ -934,7 +934,7 @@ msgid "Post-Quantum"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/netbird/settings.js:226
-msgid "Post-quantum secure the connection via Rosenpass (experimental)."
+msgid "Post-quantum secure the connection via Rosenpass (experimental). NetBird has deprecated Rosenpass and may remove it in a future release."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/netbird/logs.js:184

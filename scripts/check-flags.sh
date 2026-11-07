@@ -44,6 +44,8 @@ SKIP_OPERATIONAL="--admin-url --anonymize --anonymize-level --config --daemon-ad
 #   --enable-local-metrics --local-metrics-address     本机 metrics 端点,路由器场景价值低
 SKIP_OMITTED="--mtu --external-ip-map --extra-dns-labels --extra-iface-blacklist --dns-router-interval --ssh-jwt-cache-ttl --network-monitor --disable-auto-connect --enable-lazy-connection --dns-resolver-address --enable-local-metrics --local-metrics-address"
 SKIP=" $SKIP_OPERATIONAL $SKIP_OMITTED "
+# 上游标记为废弃、从 help 隐藏但仍可用的 flag(netbird-settings 用 _accepts_bool_flag 实际探测):
+HIDDEN_DEPRECATED=" --enable-rosenpass --rosenpass-permissive "
 
 # ── 取 `netbird up --help` 文本 ───────────────────────────────────────────────
 get_help() {
@@ -89,6 +91,7 @@ done
 GONE=""
 for f in $MAPPED; do
 	in_list "$f" "$AVAIL_SP" && continue
+	in_list "$f" "$HIDDEN_DEPRECATED" && continue
 	GONE="$GONE $f"
 done
 

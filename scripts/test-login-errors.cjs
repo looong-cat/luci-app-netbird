@@ -291,8 +291,53 @@ reload_service
 	return failed;
 }
 
+// 上游废弃后 flag 从 help 隐藏但仍可用:真实 _render_and_apply 的 dry-run,只替换 netbird 和 uci。
+const ROSENPASS_CASES = [
+	{ name: '隐藏但可用(0.82)', help: '  --other=false', known: true, expect: ['--enable-rosenpass=true', '--rosenpass-permissive=true'] },
+	{ name: 'help 里有(旧版)', help: '      --enable-rosenpass\n      --rosenpass-permissive', known: true, expect: ['--enable-rosenpass=true', '--rosenpass-permissive=true'] },
+	{ name: '不支持(更旧或上游移除)', help: '  --other=false', known: false, expect: [] },
+];
+
+function runRosenpassCases() {
+	const init = fs.readFileSync(path.join(PKG, 'root/etc/init.d/netbird-settings'), 'utf8')
+		.replace(/^\s*\. \/usr\/share\/netbird\/.*$/gm, ':');
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-rosenpass-test-'));
+	let failed = 0;
+	try {
+		const bin = path.join(dir, 'netbird');
+		fs.writeFileSync(bin, `#!/bin/sh
+case "$*" in
+	'up --help') printf '%s\\n' "$TEST_HELP"; exit 0 ;;
+	'up --help --enable-rosenpass=false'|'up --help --rosenpass-permissive=false') [ "$TEST_KNOWN" = 1 ]; exit $? ;;
+esac
+exit 0
+`, { mode: 0o755 });
+		const file = path.join(dir, 'settings.sh');
+		fs.writeFileSync(file, init + `
+NB_RUN_TEST=1
+uci() { case "$*" in *rosenpass_enabled|*rosenpass_permissive) printf 1 ;; esac; }
+logger() { :; }
+nb_run_bounded() { shift; "$@"; }
+NB_DRY_RUN=1
+_render_and_apply "$TEST_BIN"
+`);
+		ROSENPASS_CASES.forEach((c) => {
+			const out = execFileSync('/bin/sh', [file], { encoding: 'utf8', env: Object.assign({}, process.env,
+				{ TEST_BIN: bin, TEST_HELP: c.help, TEST_KNOWN: c.known ? '1' : '0' }) });
+			const got = out.match(/--(enable-rosenpass|rosenpass-permissive)=[a-z]+/g) || [];
+			const good = JSON.stringify(got) === JSON.stringify(c.expect);
+			console.log((good ? 'ok   ' : 'FAIL ') + 'Rosenpass:' + c.name + (good ? '' : ': 实际 ' + JSON.stringify(got)));
+			if (!good) failed++;
+		});
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+	return failed;
+}
+
 (async () => {
 	let failed = checkBackendCases(runBackendCases());
+	failed += runRosenpassCases();
 	failed += await runFrontendCases();
 	failed += runSettingsCases();
 	if (failed) {

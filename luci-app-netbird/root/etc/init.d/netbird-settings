@@ -116,12 +116,22 @@ _ntf_sub() {
 # （15 个）与这两个取值 flag 一律经 _has_flag 门控，help 无此 flag 则整条跳过；不支持的 flag
 # 在 daemon 侧无持久值，跳过零粘滞风险。
 _UP_HELP=""
+_UP_BIN=""
 _load_up_help() {
+	_UP_BIN="$1"
 	_UP_HELP="$("$1" up --help 2>&1)"
 }
 # _has_flag --some-flag —— help 文本是否含该 long flag（词边界：前导空白 + flag + 空白/=/行尾）。
 _has_flag() {
 	echo "$_UP_HELP" | grep -qE "(^|[[:space:]])$1([[:space:]]|=|\$)"
+}
+
+# _accepts_bool_flag --some-flag —— 能否使用某个布尔 flag。上游废弃的 flag 会从 help 隐藏但仍然可用,
+#   只看 help 会把设置静默跳过。help 里没有时让 CLI 实际解析一次:它先解析 flag 再显示帮助,
+#   未知 flag 会报错退出,已知 flag 退出 0,不会连接服务。
+_accepts_bool_flag() {
+	_has_flag "$1" && return 0
+	nb_run_bounded 6 "$_UP_BIN" up --help "$1=false" >/dev/null 2>&1
 }
 
 # ── 敏感渲染值脱敏（安全基线兜底防线，密钥绝不入日志）─────────────────────────
@@ -257,10 +267,10 @@ _render_and_apply() {
 		set -- "$@" "--disable-ipv6=$(_ntf enable_ipv6 0)"
 	fi
 
-	if _has_flag --enable-rosenpass; then
+	if _accepts_bool_flag --enable-rosenpass; then
 		set -- "$@" "--enable-rosenpass=$(_tf rosenpass_enabled 1)"
 	fi
-	if _has_flag --rosenpass-permissive; then
+	if _accepts_bool_flag --rosenpass-permissive; then
 		set -- "$@" --rosenpass-permissive="$(_tf_sub rosenpass_enabled 1 rosenpass_permissive 1)"
 	fi
 
