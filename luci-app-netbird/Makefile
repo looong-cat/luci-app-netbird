@@ -31,7 +31,7 @@ LUCI_URL:=https://github.com/looong-cat/luci-app-netbird
 LUCI_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 
 PKG_NAME:=luci-app-netbird
-PKG_VERSION:=0.2.0
+PKG_VERSION:=0.2.1
 PKG_RELEASE:=1
 PKG_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 PKG_LICENSE:=Apache-2.0
@@ -50,6 +50,18 @@ PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 define Package/luci-app-netbird/conffiles
 /etc/config/netbird
 /etc/config/netbird_bin
+endef
+
+# 替换 luci.mk 默认的安装脚本,只改一处:rpcd 重载放到后台稍后执行。
+# 22.03、23.05 的 rpcd 收到 HUP 后不再回复进行中的调用,从页面更新本插件时,
+# 安装已成功,页面却等到超时并报更新失败。其余两行和默认脚本相同。
+define Package/$(PKG_NAME)/postinst
+[ -n "$${IPKG_INSTROOT}" ] || { \
+	rm -f /tmp/luci-indexcache.*
+	rm -rf /tmp/luci-modulecache/
+	( sleep 5; killall -HUP rpcd ) </dev/null >/dev/null 2>&1 &
+	exit 0
+}
 endef
 
 # luci.mk 内部已 $(eval $(call BuildPackage,...)),不要再重复调用(否则 package

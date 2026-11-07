@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.1-r1 — 2026-11-06
+
+### Fixed
+
+- On OpenWrt 22.03 and 23.05, updating this app from its own page no longer reports a failure after the update has already succeeded. The update to this version can still show the old message once, because the new install step only takes effect from this version on.
+
 ## 0.2.0-r1 — 2026-11-06
 
 This release starts the `0.2` series after the features added across `0.1.0-r2` to `r27`. Upgrades from `0.1.0` work normally.
