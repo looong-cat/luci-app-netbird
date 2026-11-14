@@ -187,7 +187,8 @@ function _resolve_mgmt_url(arg_url) {
 // EINVAL、什么也不写；23.05 起带名提交正常。22.03 上也不能退回不带参数的 commit()：游标里
 // 加载过两个以上配置时它提交后会死循环，卡住整个 rpcd。所以带名提交失败时，用不带参数的
 // save() 把改动写进默认暂存目录（/tmp/.uci，与 uci 命令共用），再由 uci 命令提交这一个配置。
-// 本文件每处写入都用新游标、只改要提交的配置，不会把别的配置的改动一起暂存下来。
+// 本文件每次提交前，游标里只改了要提交的那一个配置（撤销流程先提交 firewall 再改 network），
+// 不会把别的配置的改动一起暂存下来。
 function _uci_commit(c, conf) {
     if (c.commit(conf) === true)
         return true;
