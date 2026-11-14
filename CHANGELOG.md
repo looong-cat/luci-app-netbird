@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.2.2 — Unreleased
+
+Starting with this release, the app and its GitHub Releases show the version as `x.y.z`. The package files and the package feed keep the `-r1` suffix (`0.2.2-r1`), so routers running earlier versions still find this update.
+
+### Security
+
+- Updates from official NetBird releases now stop before the downloaded program is run if the release's checksum list cannot be downloaded or has no entry for the file. The page says which of the two happened. Updates from a custom download URL are unchanged ([#18](https://github.com/looong-cat/luci-app-netbird/issues/18), reported by [@imkebe](https://github.com/imkebe)).
+- The setup key and the WireGuard preshared key are now passed to NetBird through environment variables, so other processes on the router can no longer read them from the process list during login or while settings are applied ([#20](https://github.com/looong-cat/luci-app-netbird/issues/20), reported by [@imkebe](https://github.com/imkebe)).
+
+### Fixed
+
+- The Status page no longer shows "Forwarding rules: 0" on NetBird 0.81 and later, which removed this feature. The line now appears only when there are forwarding rules.
+- When no management URL is saved in the app, the Authentication page again pre-fills it from NetBird's own configuration on NetBird 0.74 and later, including apk-based systems.
+
 ## 0.2.1-r1 — 2026-11-07
 
 ### Fixed
