@@ -26,34 +26,56 @@ the current run finishes.
 ## Changelog
 
 Every release must update `CHANGELOG.md` in the same change set: one entry per
-shipped `PKG_RELEASE` (version, date, notable changes). The automated GitHub
-Release notes only list build provenance and assets — they are not a substitute
-for the changelog.
+shipped version, titled with the public version and date (`## x.y.z — YYYY-MM-DD`),
+followed by notable changes. Entries before `0.2.2` keep their original `x.y.z-rN`
+titles. The automated GitHub Release notes only list build provenance and assets —
+they are not a substitute for the changelog.
 
-## Version source
+## Versions
 
-The release version is extracted from the built package filenames, for example:
+The package version is `x.y.z-r1`: `PKG_VERSION` is `x.y.z` and `PKG_RELEASE` stays 1.
+Everything public shows only `x.y.z`.
 
-- `luci-app-netbird_0.1.0-r2_all.ipk`
-- `luci-app-netbird-0.1.0-r2.apk`
+| Where | Shows |
+| --- | --- |
+| Package file names, the feed's `index.json`, what opkg/apk report | `0.2.2-r1` |
+| The app's Versions page, `manifest.json` `version`, GitHub Release tag and title, changelog titles, docs | `0.2.2` (tag `v0.2.2`) |
 
-The workflow verifies that the ipk and apk builds report the same version. It then:
+The `-r1` suffix is kept on purpose. Installed copies of this app check for updates
+by reading the feed's `index.json`, and they only accept a version in the `x.y.z-rN`
+form there. Copies already on routers cannot be changed, so without the suffix their
+update check would fail and they would never be offered a new version from the app.
+The app compares the full `x.y.z-rN` versions; only the display drops an exact `-r1`.
+Any other suffix, such as `0.1.0-r27`, is shown unchanged so two different versions
+never look the same.
 
-- writes that version to `manifest.json`
-- creates or updates the GitHub Release tag `v<version>`
+Always bump `PKG_VERSION` in `luci-app-netbird/Makefile` for a code change that should
+ship:
+
+- A new feature or a behavior change users will notice: increase the middle number and
+  reset the last number to 0.
+- Anything else, such as bug fixes and translations: increase the last number.
+
+## What the workflow does
+
+The workflow reads the package version from the built file names, for example:
+
+- `luci-app-netbird_0.2.2-r1_all.ipk`
+- `luci-app-netbird-0.2.2-r1.apk`
+
+It verifies that the ipk and apk builds report the same full version, drops an exact
+`-r1` suffix to get the public version, and then:
+
+- writes the public version to `manifest.json` (the download links there come from the
+  file list, so they keep the real `-r1` file names)
+- creates the GitHub Release `v<public version>` (for example `v0.2.2`), or updates it
+  and replaces its assets if that Release already exists
 - uploads the ipk/apk packages and `manifest.json` as release assets
 - deploys the signed feed and landing page to Cloudflare Pages
 
-Always bump the version in `luci-app-netbird/Makefile` for a code change that should
-ship:
-
-- A new feature or a behavior change users will notice: increase the middle number of
-  `PKG_VERSION` and reset the last number to 0.
-- Anything else, such as bug fixes and translations: increase the last number of
-  `PKG_VERSION`.
-
-`PKG_RELEASE` stays 1. Installed versions of this package expect the `x.y.z-rN` form when
-they check for updates, so removing the suffix would stop them from finding new versions.
+Releases up to `v0.2.1-r1` keep their existing tags. Because an existing Release is
+updated in place, a push to `main` that ships code without bumping `PKG_VERSION`
+overwrites the assets of the current Release.
 
 ## Checks before releasing
 
