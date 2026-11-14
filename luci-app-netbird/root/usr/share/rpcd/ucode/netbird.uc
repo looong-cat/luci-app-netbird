@@ -3373,7 +3373,9 @@ return {
                     usesKernelInterface:   !!js.usesKernelInterface,
                     quantumResistance:     !!js.quantumResistance,
                     lazyConnectionEnabled: !!js.lazyConnectionEnabled,
-                    forwardingRules:       (js.forwardingRules != null) ? js.forwardingRules : 0,
+                    // forwardingRules 只在 0.38–0.80 的 status --json 里有（0.81 下线 ingress 端口转发时删掉了），
+                    // 缺失时给 null 而不是 0，前端据此区分「没有这个字段」和「规则数为 0」。
+                    forwardingRules:       (type(js.forwardingRules) == 'int' || type(js.forwardingRules) == 'double') ? js.forwardingRules : null,
                     networks:              js.networks || [],
                     profileName:           js.profileName || '',
                     peers: {

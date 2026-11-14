@@ -107,8 +107,13 @@ function renderConnInfo(res) {
 		nb.pair(_('Interface type'),     d.usesKernelInterface ? _('Kernel') : _('Userspace')),
 		nb.pair(_('Quantum resistance'), yesNo(d.quantumResistance)),
 		nb.pair(_('Lazy connection'),    yesNo(d.lazyConnectionEnabled)),
-		nb.pair(_('Networks'),           nets.length ? nets.join(', ') : '-'),
-		nb.pair(_('Forwarding rules'),   d.forwardingRules || 0),
+		nb.pair(_('Networks'),           nets.length ? nets.join(', ') : '-')
+	);
+	// 与 netbird status 纯文本输出一致：只在规则数大于 0 时显示。0.81 起上游删了这个字段（后端给 null），
+	// 0.37 及更早没有这个字段，都不显示这一行。
+	if (typeof d.forwardingRules === 'number' && d.forwardingRules > 0)
+		rows.push(nb.pair(_('Forwarding rules'), d.forwardingRules));
+	rows.push(
 		nb.pair(_('Profile'),            d.profileName || '-'),
 		nb.pair(_('Peers'),              _('%d / %d connected').format(peers.connected || 0, peers.total || 0))
 	);
