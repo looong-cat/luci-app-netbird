@@ -27,6 +27,11 @@ var callLuciAppUpdate = rpc.declare({ object: 'luci.netbird', method: 'update_lu
 
 function fmtVer(v) { return (v && v.length) ? ('v' + v) : null; }
 
+// 本插件的包版本固定带 -r1 后缀(老版本的更新检查只认 x.y.z-rN),界面只显示 x.y.z。
+// 只去掉恰好是 -r1 的后缀:0.1.0-r27 这类老版本原样显示,不会和别的版本显示成同一个。
+// 仅用于显示;后端比较版本仍用完整的 x.y.z-rN。
+function appVer(v) { return String(v || '').replace(/-r1$/, ''); }
+
 // NetBird 0.76.0 / 0.76.1 修复了本地服务 socket 的两个安全问题(本地提权、读取 root 文件)。
 // 运行版本低于 0.76.1 时在版本页提示升级;版本号解析不出时不提示。
 function belowSecureVersion(v) {
@@ -141,10 +146,10 @@ return view.extend({
 			luMsg = E('div', { 'class': 'cbi-value-description', 'style': 'color:#a00' }, lu.error);
 		else if (lu && lu.latest_version && lu.update_available)
 			luMsg = E('div', { 'class': 'cbi-value-description', 'style': 'color:#080' },
-				_('luci-app-netbird update available: v%s').format(lu.latest_version));
+				_('luci-app-netbird update available: v%s').format(appVer(lu.latest_version)));
 		else if (lu && lu.latest_version)
 			luMsg = E('div', { 'class': 'cbi-value-description', 'style': 'color:#080' },
-				_('luci-app-netbird is already up to date (v%s).').format(lu.latest_version));
+				_('luci-app-netbird is already up to date (v%s).').format(appVer(lu.latest_version)));
 		var node = E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, _('Current')),
 			E('div', { 'class': 'nb-conn-info' }, [
@@ -174,7 +179,7 @@ return view.extend({
 				E('div', { 'class': 'nb-pair' }, [
 					E('span', { 'class': 'nb-pair-label' }, _('luci-app-netbird')),
 					E('div', { 'class': 'nb-pair-value nb-pair-value-block' }, [
-						fmtVer(d.luci_app_version) || '-',
+						fmtVer(appVer(d.luci_app_version)) || '-',
 						' ',
 						E('a', { 'href': 'https://github.com/looong-cat/luci-app-netbird', 'target': '_blank', 'rel': 'noopener noreferrer' }, 'GitHub'),
 						E('div', { 'class': 'cbi-section-actions', 'style': 'margin-top:.4em' }, this._spaced(luActs)),
@@ -580,7 +585,7 @@ return view.extend({
 		var self = this;
 		var info = self._luciAppLatest || {};
 		ui.showModal(_('Update luci-app-netbird'), [
-			E('p', {}, _('Update luci-app-netbird from v%s to v%s?').format(info.local_version || '-', info.latest_version || '?')),
+			E('p', {}, _('Update luci-app-netbird from v%s to v%s?').format(appVer(info.local_version) || '-', appVer(info.latest_version) || '?')),
 			E('p', { 'class': 'cbi-section-descr' }, _('Packages will be downloaded from %s. The page may need to be reloaded after installation.').format(info.feed_url || '')),
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')), ' ',
@@ -599,7 +604,7 @@ return view.extend({
 		}), { ok: false }).then(function (res) {
 			ui.hideModal();
 			if (res && res.ok) {
-				ui.addNotification(null, E('p', {}, _('luci-app-netbird updated to v%s. Reload this page to use the new UI.').format((res.data && res.data.to) || '?')), 'info');
+				ui.addNotification(null, E('p', {}, _('luci-app-netbird updated to v%s. Reload this page to use the new UI.').format(appVer(res.data && res.data.to) || '?')), 'info');
 				self._luciAppLatest = null;
 				return self.refresh();
 			}
