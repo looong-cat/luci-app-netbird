@@ -31,7 +31,7 @@ LUCI_URL:=https://github.com/looong-cat/luci-app-netbird
 LUCI_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 
 PKG_NAME:=luci-app-netbird
-PKG_VERSION:=0.2.1
+PKG_VERSION:=0.2.2
 PKG_RELEASE:=1
 PKG_MAINTAINER:=looong-cat <foxhis11@gmail.com>
 PKG_LICENSE:=Apache-2.0
@@ -40,7 +40,7 @@ PKG_LICENSE_FILES:=LICENSE
 # i18n 子包版本跟随主包 release。luci.mk 默认 PKG_PO_VERSION=findrev(luci 仓 git rev),
 # 在 luci 树外 standalone 构建时恒为 "0" → 每次发布 i18n 子包版本不变,opkg 把"同版本"
 # 子包当已最新而跳过升级,译文更新到不了 opkg 升级用户(apk 则照常 replace、不受影响)。
-# 固定为主包版本,使 PKG_RELEASE 每次递增时 i18n 子包版本一并递增 → opkg 升级也刷新 .lmo。
+# 固定为主包版本(PKG_RELEASE 长期为 1),PKG_VERSION 递增时 i18n 子包版本一并递增 → opkg 升级也刷新 .lmo。
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 
 # /etc/config/netbird 标记为 conffile:opkg 升级不覆盖用户配置;
