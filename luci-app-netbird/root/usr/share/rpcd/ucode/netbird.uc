@@ -2321,7 +2321,8 @@ function _binop_guard(fn, req) {
 //   1. arch 解析过白名单 → arch_mismatch
 //   2. 解析下载 URL+文件名:custom 用 args.url(校验 http/https);否则 GitHub latest 拼 URL
 //   3. 下载 tarball 到 /tmp → download_failed
-//   4. sha256 校验(有版本号则去 GitHub 抓对应 checksums;custom 镜像同版本亦可校验;无则跳过记 note)→ checksum_mismatch
+//   4. sha256 校验(有版本号则去 GitHub 抓对应 checksums;官方路径取不到或无对应条目也中止;
+//      custom 镜像同版本亦可校验,无则跳过记 note)→ checksum_mismatch
 //   5. 解压取 netbird 成员 → install_failed
 //   6. **ELF 头校验 arch 匹配**(防坏包/错架构替换崩服务)→ arch_mismatch(绝不安装)
 //   7. 解压件能执行 `version` → install_failed
@@ -2455,8 +2456,11 @@ function _update_binary_locked(req) {
 
     // step 4 — 校验和。优先用用户在「自定义 URL」页填的校验和硬校验(按十六进制长度自动判算法:
     //   32=md5 / 40=sha1 / 64=sha256 / 128=sha512);否则有版本号就去 GitHub 抓官方 sha256
-    //   checksums 比对(无 curl 机/取不到时 best-effort 跳过)。用户提供的校验和在解压/执行**之前**
-    //   硬校验,不匹配立即中止(防 http:// 镜像被替换;md5/sha1 仅防意外损坏,抗篡改请用 sha256+)。
+    //   checksums 比对。用户提供的校验和在解压/执行**之前**硬校验,不匹配立即中止(防 http:// 镜像
+    //   被替换;md5/sha1 仅防意外损坏,抗篡改请用 sha256+)。
+    //   官方 release 路径(非自定义 URL)必须核对成功才继续:checksums 取不到、或里面没有本资产名的条目,
+    //   都在解压和以 root 执行 `version` 之前中止并清理 work——否则下载被替换或截断时会直接执行未校验的
+    //   文件。自定义 URL 的镜像常不带 checksums 文件,仍按 best-effort 跳过并记 note。
     let checksum_note = '';
     let want_ck = (type(a.checksum) == 'string') ? lc(trim(a.checksum)) : '';
     if (length(want_ck) > 0) {
@@ -2509,9 +2513,16 @@ function _update_binary_locked(req) {
                     return fail_work(CODE.CHECKSUM_MISMATCH,
                                      sprintf('sha256 checksum mismatch (expected=%s… actual=%s); aborted',
                                              substr(expected, 0, 16), length(actual) == 64 ? substr(actual, 0, 16) : '(compute failed)'));
+            } else if (!is_custom) {
+                // 文案固定(不拼资产名),前端经后台进度只拿到 message,固定串才能按 po 翻译。
+                return fail_work(CODE.CHECKSUM_MISMATCH,
+                                 'The official checksum list has no entry for this download, so it was not installed. Try again later; the release may still be publishing its files.');
             } else {
                 checksum_note = 'no matching filename in checksums; skipped sha256';
             }
+        } else if (!is_custom) {
+            return fail_work(CODE.CHECKSUM_MISMATCH,
+                             'Could not download the official checksum list, so the download was not installed. Check that the router can reach github.com, then try again.');
         } else {
             checksum_note = 'could not fetch checksums; skipped sha256 (custom mirror/network)';
         }

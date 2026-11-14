@@ -85,3 +85,9 @@ login, connection or settings code changes:
 ```sh
 node scripts/test-login-errors.cjs
 ```
+
+Whenever the binary download or checksum code changes:
+
+```sh
+node scripts/test-update-checksum.cjs
+```

@@ -86,10 +86,12 @@ images without curl.
 best-effort overlay free-space preflight; low space fails early with `insufficient_space` instead of
 starting a doomed write. ENOSPC is still handled at write time, and failed first-time writes remove
 the half-written target instead of leaving a `netbird-v*` ghost version. Download artifacts must pass
-size sanity checks, archive integrity checks (`tar -tzf` for tarballs), checksum checks when
-available, ELF e_machine validation, and `netbird version` before they enter the version list. Each
-binary operation sweeps old `/tmp/nb-update*` workdirs and stale non-working custom binaries; custom
-versions are listed only when the file is executable and can report a version.
+size sanity checks, archive integrity checks (`tar -tzf` for tarballs), checksum checks, ELF
+e_machine validation, and `netbird version` before they enter the version list. Official release
+downloads must match the published sha256 list; if the list cannot be fetched or has no entry for
+the asset, the download is rejected before the binary is ever run. Custom URLs check the list only
+when it is available. Each binary operation sweeps old `/tmp/nb-update*` workdirs and stale
+non-working custom binaries; custom versions are listed only when the file is executable and can report a version.
 
 **Multi-arch.** The package is `PKGARCH:=all` (pure ucode/JS/shell) → one artifact for every CPU;
 no build matrix. Arch only matters at runtime for binary acquisition: the **feed path is

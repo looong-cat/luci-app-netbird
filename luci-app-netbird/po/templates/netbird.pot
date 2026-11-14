@@ -1676,3 +1676,9 @@ msgstr ""
 
 msgid "Saved settings are not active yet. They will be applied the next time NetBird connects."
 msgstr ""
+
+msgid "The official checksum list has no entry for this download, so it was not installed. Try again later; the release may still be publishing its files."
+msgstr ""
+
+msgid "Could not download the official checksum list, so the download was not installed. Check that the router can reach github.com, then try again."
+msgstr ""
