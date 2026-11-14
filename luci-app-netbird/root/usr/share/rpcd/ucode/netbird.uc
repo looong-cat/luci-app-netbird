@@ -297,41 +297,89 @@ function _mark_service_enabled() {
     c.commit('netbird');
 }
 
-// _mgmt_url_from_config() → string|''：从 /etc/netbird/config.json 只读重建管理 URL。
+// _netbird_init_paths() → { config, state_dir }：解析 /etc/init.d/netbird（netbird 包自带）
+// 传给 daemon 的 NB_CONFIG / NB_STATE_DIR，未声明的项为 null。
+// 不同包的声明不同：OpenWrt opkg 包传 NB_CONFIG=/etc/netbird/config.json；
+// apk 包传 NB_STATE_DIR=/root/.config/netbird；有的固件两项都不传（daemon 用上游默认）。
+function _netbird_init_paths() {
+    let r = { config: null, state_dir: null };
+    let f = open('/etc/init.d/netbird', 'r');
+    if (f) {
+        let txt = f.read('all');
+        f.close();
+        let m = match(txt, /NB_CONFIG="([^"]+)"/);
+        if (m) r.config = m[1];
+        m = match(txt, /NB_STATE_DIR="([^"]+)"/);
+        if (m) r.state_dir = m[1];
+    }
+    return r;
+}
+
+// _read_json_file(path) → 解析后的值|null：读失败、空文件或不是合法 JSON 都返回 null。
+function _read_json_file(path) {
+    let f = open(path, 'r');
+    if (f == null)
+        return null;
+    let raw = f.read('all') || '';
+    f.close();
+    if (length(raw) == 0)
+        return null;
+    try {
+        return json(raw);
+    } catch (e) {
+        return null;
+    }
+}
+
+// _mgmt_url_from_config() → string|''：从 daemon 的配置文件只读重建管理 URL。
 //
-// 安全基线：config.json 只读，绝不写——本函数仅用于「展示」预填管理 URL（当 UCI 无值时）。
-// config.json 的 ManagementURL 是对象 {Scheme, Host, ...}；URL = Scheme + "://" + Host。
-// 路径不硬编码为唯一值：候选序探测（与上游默认一致），读失败/解析失败静默返 ''。
+// 文件顶部「read 方法禁直读 config.json」的例外：daemon 不在运行或未登录时没有 CLI 能给出
+// 已保存的管理地址，这里只读、绝不写，且仅用于 UCI 无值时「展示」预填管理 URL。
+// 配置里的 ManagementURL 是对象 {Scheme, Host, ...}（0.83 仍如此）；URL = Scheme + "://" + Host。
+//
+// 候选按优先级取第一个存在的文件（读失败/解析失败静默返 ''）：
+//   1. 当前 profile 不是 default 时，它自己的配置：daemon 在 <state_dir>/active_profile.json
+//      记录 {"name": <profile ID>, "username": ...}；0.83+ 新建的 profile 在
+//      <state_dir>/profiles.v1/<ID>.json，0.83 以前及迁移前的在 <state_dir>/<username>/<ID>.json
+//      （username 只保留字母、数字、_、-，为空时就是 <state_dir> 本身）；
+//   2. default profile：init 声明的 NB_CONFIG（daemon 的 --config 只作用于 default profile）；
+//   3. <state_dir>/default.json（0.74+ 的 default profile；state_dir = NB_STATE_DIR，未声明时
+//      为上游默认 /var/lib/netbird）；
+//   4. /var/lib/netbird/default.json（无 env 裸启的 0.74+）；
+//   5. 0.74 以前的两个旧路径：/etc/netbird/config.json（-c 旧默认）、/var/lib/netbird/config.json。
 function _mgmt_url_from_config() {
-    let candidates = [
-        '/etc/netbird/config.json',      // -c flag 默认
-        '/var/lib/netbird/config.json',  // 官方上游 Linux 默认
-    ];
+    let init = _netbird_init_paths();
+    let state_dir = init.state_dir || '/var/lib/netbird';
+    let candidates = [];
+    let active = _read_json_file(state_dir + '/active_profile.json');
+    let id = (active != null && type(active) == 'object') ? active.name : null;
+    // ID 来自文件内容，与上游一样拒绝含路径分隔符或 .. 的值，避免拼出 state_dir 以外的路径
+    if (type(id) == 'string' && length(id) > 0 && id != 'default' &&
+        !match(id, /[\/\\]/) && index(id, '..') < 0) {
+        let user = (type(active.username) == 'string') ? replace(active.username, /[^A-Za-z0-9_-]/g, '') : '';
+        push(candidates, state_dir + '/profiles.v1/' + id + '.json');
+        push(candidates, state_dir + (length(user) > 0 ? '/' + user : '') + '/' + id + '.json');
+    }
+    if (init.config)
+        push(candidates, init.config);
+    push(candidates,
+        state_dir + '/default.json',
+        '/var/lib/netbird/default.json',
+        '/etc/netbird/config.json',
+        '/var/lib/netbird/config.json');
     let path = null;
     for (let p in candidates) {
         if (access(p, 'f')) { path = p; break; }
     }
     if (path == null)
         return '';
-    // 只读：cat 文件（path 字面常量，无用户输入）；解析 ManagementURL 对象重建 URL。
-    let fd = popen('cat ' + shell_quote(path) + ' 2>/dev/null', 'r'); // shell-audit-ok: path 字面常量经 shell_quote
-    if (fd == null)
-        return '';
-    let raw = fd.read('all') || '';
-    fd.close();
-    if (length(raw) == 0)
-        return '';
-    try {
-        let js = json(raw);
-        let mu = (js != null) ? js.ManagementURL : null;
-        if (mu != null && type(mu) == 'object' &&
-            type(mu.Scheme) == 'string' && length(mu.Scheme) > 0 &&
-            type(mu.Host) == 'string' && length(mu.Host) > 0)
-            return mu.Scheme + '://' + mu.Host;
-    } catch (e) {
-        return '';  // 解析失败静默返空（前端回退 placeholder）
-    }
-    return '';
+    let js = _read_json_file(path);
+    let mu = (js != null && type(js) == 'object') ? js.ManagementURL : null;
+    if (mu != null && type(mu) == 'object' &&
+        type(mu.Scheme) == 'string' && length(mu.Scheme) > 0 &&
+        type(mu.Host) == 'string' && length(mu.Host) > 0)
+        return mu.Scheme + '://' + mu.Host;
+    return '';  // 前端回退 placeholder
 }
 
 // _wipe_local_identity() → int：删除的本地身份文件数；-1 = 存在但删除失败。
@@ -341,19 +389,15 @@ function _mgmt_url_from_config() {
 //   - netbird 0.74+ profile 布局把身份放 NB_STATE_DIR/<profile>.json
 //     （含 active_profile.json，apk 包 init 传 NB_STATE_DIR=/root/.config/netbird）。
 // 优先解析 init 脚本实际声明的路径，再叠加已知默认路径兜底；全部幂等（不存在即跳过）。
+// 删除范围：上面的固定文件、init 声明的 NB_CONFIG，以及 /root/.config/netbird 和 init 声明的
+// NB_STATE_DIR 两个目录顶层的 *.json（不进子目录）。
 // 仅供 do_logout local_only 分支（用户二次确认后的显式销毁）调用；调用前必须已停 daemon。
 function _wipe_local_identity() {
     let candidates = [ '/etc/netbird/config.json', '/var/lib/netbird/config.json' ];
     let state_dirs = [ '/root/.config/netbird' ];
-    let f = open('/etc/init.d/netbird', 'r');
-    if (f) {
-        let txt = f.read('all');
-        f.close();
-        let m = match(txt, /NB_CONFIG="([^"]+)"/);
-        if (m) push(candidates, m[1]);
-        m = match(txt, /NB_STATE_DIR="([^"]+)"/);
-        if (m) push(state_dirs, m[1]);
-    }
+    let init = _netbird_init_paths();
+    if (init.config) push(candidates, init.config);
+    if (init.state_dir) push(state_dirs, init.state_dir);
     for (let d in uniq(state_dirs)) {
         let entries = lsdir(d);
         if (entries)
