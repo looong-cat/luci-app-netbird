@@ -122,9 +122,15 @@ jobs:
             echo "::error::Package version mismatch: ipk=$VER apk=$APK_VER"
             exit 1
           fi
+          # The package keeps a fixed -r1 suffix (feed index.json and file names), because
+          # installed versions only accept x.y.z-rN when checking for updates. Public
+          # surfaces (manifest.json version, Release tag and title) show x.y.z. Only an
+          # exact -r1 is dropped, so any other -rN stays visible instead of colliding.
+          PUBLIC_VER="${VER%-r1}"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "public_version=$PUBLIC_VER" >> "$GITHUB_OUTPUT"
           UPDATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          jq -n --arg v "$VER" --arg u "$UPDATED" \
+          jq -n --arg v "$PUBLIC_VER" --arg u "$UPDATED" \
             --argjson b1 "$(gen_branch openwrt-24.10 ipk)" \
             --argjson b2 "$(gen_branch openwrt-25.12 apk)" \
             '{version:$v, updated:$u, branches:{"openwrt-24.10":$b1,"openwrt-25.12":$b2}}' \
@@ -145,9 +151,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.manifest.outputs.version }}
+          PUBLIC_VERSION: ${{ steps.manifest.outputs.public_version }}
         run: |
           set -eu
-          tag="v${VERSION}"
+          tag="v${PUBLIC_VERSION}"
           title="luci-app-netbird ${tag}"
           mkdir -p release-assets
           find public/openwrt-24.10/all/netbird public/openwrt-25.12/all/netbird \
@@ -157,7 +164,7 @@ jobs:
 
           notes="$(mktemp)"
           {
-            echo "Automated package feed release for ${VERSION}."
+            echo "Automated package feed release for ${PUBLIC_VERSION} (package version ${VERSION})."
             echo
             echo "Built from ${GITHUB_SHA}."
             echo
