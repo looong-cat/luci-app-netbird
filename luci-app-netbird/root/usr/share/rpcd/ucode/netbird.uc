@@ -182,6 +182,20 @@ function _resolve_mgmt_url(arg_url) {
     return { ok: true, url: null };
 }
 
+// _uci_commit(c, conf) → bool：提交游标里 conf 的改动。
+// OpenWrt 22.03 自带的 ucode uci 模块（2022-12-02）在 commit()/save() 带配置名时直接返回
+// EINVAL、什么也不写；23.05 起带名提交正常。22.03 上也不能退回不带参数的 commit()：游标里
+// 加载过两个以上配置时它提交后会死循环，卡住整个 rpcd。所以带名提交失败时，用不带参数的
+// save() 把改动写进默认暂存目录（/tmp/.uci，与 uci 命令共用），再由 uci 命令提交这一个配置。
+// 本文件每处写入都用新游标、只改要提交的配置，不会把别的配置的改动一起暂存下来。
+function _uci_commit(c, conf) {
+    if (c.commit(conf) === true)
+        return true;
+    if (c.save() !== true)
+        return false;
+    return system('uci commit ' + shell_quote(conf) + ' >/dev/null 2>&1') == 0;
+}
+
 // _persist_mgmt_url(url) — 把 management_url 写入 UCI 并 commit（非机密）。
 // 仅在 caller 显式传入合法 url 时调用；空值不写（避免清空已有值）。
 function _persist_mgmt_url(url) {
@@ -192,7 +206,7 @@ function _persist_mgmt_url(url) {
     if (c.get('netbird', 'settings') == null)
         c.set('netbird', 'settings', 'netbird');
     c.set('netbird', 'settings', 'management_url', url);
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 // _norm_mgmt_url(u) → 管理 URL 归一化（仅比较用）：小写、去尾斜杠、无端口时补 scheme
@@ -253,7 +267,7 @@ function _persist_setup_key_hint(key) {
     if (c.get('netbird', 'settings') == null)
         c.set('netbird', 'settings', 'netbird');
     c.set('netbird', 'settings', 'setup_key_hint', hint);
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 // _persist_runtime_error(message) / _clear_runtime_error()
@@ -266,7 +280,7 @@ function _persist_runtime_error(message) {
     if (c.get('netbird', 'runtime') == null)
         c.set('netbird', 'runtime', 'state');
     c.set('netbird', 'runtime', 'last_error', msg);
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 function _clear_runtime_error() {
@@ -280,7 +294,7 @@ function _set_desired_connected(want) {
     if (c.get('netbird', 'runtime') == null)
         c.set('netbird', 'runtime', 'state');
     c.set('netbird', 'runtime', 'desired_connected', want ? '1' : '0');
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 // _mark_service_enabled() — 把 UCI service_enabled 置 '1' 并 commit（已是 '1' 则免写）。
@@ -294,7 +308,7 @@ function _mark_service_enabled() {
     if (c.get('netbird', 'settings', 'service_enabled') == '1')
         return;
     c.set('netbird', 'settings', 'service_enabled', '1');
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 // _netbird_init_paths() → { config, state_dir }：解析 /etc/init.d/netbird（netbird 包自带）
@@ -730,7 +744,7 @@ function _persist_exit_node(id) {
         c.set('netbird', 'settings', 'exit_node', id);
     else
         c.delete('netbird', 'settings', 'exit_node');
-    c.commit('netbird');
+    _uci_commit(c, 'netbird');
 }
 
 // ============================================================================
@@ -1035,7 +1049,7 @@ function _do_setup_firewall_zone() {
     // 清理旧版（option network 绑定）升级残留：删 network 选项,避免悬空引用已不存在的
     // network.netbird 接口 section（删不存在 = no-op）。
     c.delete('firewall', _NB_ZONE_SECTION, 'network');
-    c.commit('firewall');
+    _uci_commit(c, 'firewall');
     let reloaded = _run_reload('firewall');
 
     return ok({
@@ -1167,7 +1181,7 @@ function _do_setup_forwarding(req) {
         ? _ensure_forwarding(c, _NB_FWD_N2L, 'netbird', 'lan')
         : _remove_forwarding(c, _NB_FWD_N2L, 'netbird', 'lan');
 
-    c.commit('firewall');
+    _uci_commit(c, 'firewall');
     let reloaded = _run_reload('firewall');
 
     // 删某向后定向冲该向已建 conntrack,让「取消勾选」对已建连接也即时生效(取消转发即时生效)。
@@ -1233,13 +1247,13 @@ function _do_teardown_automation() {
     let zone_existed = (c.get('firewall', _NB_ZONE_SECTION) == 'zone');
     if (zone_existed)
         c.delete('firewall', _NB_ZONE_SECTION);
-    c.commit('firewall');
+    _uci_commit(c, 'firewall');
 
     // 3. 旧版残留：删 network.netbird 接口（仅当确是 interface type;**不 reload network**,见上）。
     let iface_existed = (c.get('network', _NB_IFACE_SECTION) == 'interface');
     if (iface_existed) {
         c.delete('network', _NB_IFACE_SECTION);
-        c.commit('network');
+        _uci_commit(c, 'network');
     }
 
     // 只 reload firewall（撤 netbird zone 规则,安全相关;reload network 会断 netbird,故意不做）。
@@ -2821,7 +2835,7 @@ function _set_binary_source_locked(req) {
     if (c.get('netbird_bin', 'binary') == null)
         c.set('netbird_bin', 'binary', 'netbird_bin');
     c.set('netbird_bin', 'binary', 'binary_source', source);
-    c.commit('netbird_bin');
+    _uci_commit(c, 'netbird_bin');
 
     // 已是目标来源?(custom 还要确认是同一版本)
     let active = _active_source();

@@ -92,3 +92,14 @@ Whenever the binary download or checksum code changes:
 ```sh
 node scripts/test-update-checksum.cjs
 ```
+
+Whenever backend code that writes UCI changes, run this in a disposable OpenWrt 22.03
+container and in one newer release, because the 22.03 `ucode` cannot commit a single
+named config (needs Docker):
+
+```sh
+docker run --rm --platform linux/amd64 -v "$PWD:/src:ro" \
+  openwrt/rootfs:x86-64-22.03.6 sh /src/scripts/test-uci-commit.sh
+docker run --rm --platform linux/amd64 -v "$PWD:/src:ro" \
+  openwrt/rootfs:x86-64-25.12.2 sh /src/scripts/test-uci-commit.sh
+```
