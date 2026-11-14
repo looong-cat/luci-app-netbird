@@ -88,25 +88,25 @@ const CASES = [
 		url: 'https://legacy.example',
 	},
 	{
-		name: '非 default profile(按用户分目录)',
+		name: 'CLI 选了非 default profile 时仍取 default profile(插件只操作 default profile)',
 		files: {
 			'etc/init.d/netbird': APK_INIT,
 			'root/.config/netbird/default.json': cfg('apk.example'),
 			'root/.config/netbird/active_profile.json': JSON.stringify({ name: 'work', username: 'root' }),
 			'root/.config/netbird/root/work.json': cfg('work.example'),
 		},
-		url: 'https://work.example',
+		url: 'https://apk.example',
 		wipe: ['root/.config/netbird/active_profile.json', 'root/.config/netbird/default.json'],
 	},
 	{
-		name: '非 default profile(0.83 的 profiles.v1 目录)',
+		name: '切回旧版后遗留的 0.83 profile 不影响 NB_CONFIG 指向的配置',
 		files: {
 			'etc/init.d/netbird': OPKG_INIT,
 			'etc/netbird/config.json': cfg('opkg.example'),
 			'var/lib/netbird/active_profile.json': JSON.stringify({ name: 'a1b2c3', username: '' }),
 			'var/lib/netbird/profiles.v1/a1b2c3.json': cfg('v1.example'),
 		},
-		url: 'https://v1.example',
+		url: 'https://opkg.example',
 	},
 	{
 		name: 'active profile 指向的文件不存在时回到 default profile',

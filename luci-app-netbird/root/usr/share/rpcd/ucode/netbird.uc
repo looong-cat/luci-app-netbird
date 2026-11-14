@@ -337,29 +337,19 @@ function _read_json_file(path) {
 // 已保存的管理地址，这里只读、绝不写，且仅用于 UCI 无值时「展示」预填管理 URL。
 // 配置里的 ManagementURL 是对象 {Scheme, Host, ...}（0.83 仍如此）；URL = Scheme + "://" + Host。
 //
+// 只看 default profile：本插件的连接和登录都不带 --profile，操作的始终是 default profile。
+// 不读 active_profile.json：命令行另建的 profile 在二进制换成 0.74 以前的版本后仍留在磁盘上，
+// 而旧 daemon 只认 NB_CONFIG，按 active profile 找会预填一个 daemon 并不使用的管理地址。
 // 候选按优先级取第一个存在的文件（读失败/解析失败静默返 ''）：
-//   1. 当前 profile 不是 default 时，它自己的配置：daemon 在 <state_dir>/active_profile.json
-//      记录 {"name": <profile ID>, "username": ...}；0.83+ 新建的 profile 在
-//      <state_dir>/profiles.v1/<ID>.json，0.83 以前及迁移前的在 <state_dir>/<username>/<ID>.json
-//      （username 只保留字母、数字、_、-，为空时就是 <state_dir> 本身）；
-//   2. default profile：init 声明的 NB_CONFIG（daemon 的 --config 只作用于 default profile）；
-//   3. <state_dir>/default.json（0.74+ 的 default profile；state_dir = NB_STATE_DIR，未声明时
+//   1. init 声明的 NB_CONFIG（daemon 的 --config 只作用于 default profile）；
+//   2. <state_dir>/default.json（0.74+ 的 default profile；state_dir = NB_STATE_DIR，未声明时
 //      为上游默认 /var/lib/netbird）；
-//   4. /var/lib/netbird/default.json（无 env 裸启的 0.74+）；
-//   5. 0.74 以前的两个旧路径：/etc/netbird/config.json（-c 旧默认）、/var/lib/netbird/config.json。
+//   3. /var/lib/netbird/default.json（无 env 裸启的 0.74+）；
+//   4. 0.74 以前的两个旧路径：/etc/netbird/config.json（-c 旧默认）、/var/lib/netbird/config.json。
 function _mgmt_url_from_config() {
     let init = _netbird_init_paths();
     let state_dir = init.state_dir || '/var/lib/netbird';
     let candidates = [];
-    let active = _read_json_file(state_dir + '/active_profile.json');
-    let id = (active != null && type(active) == 'object') ? active.name : null;
-    // ID 来自文件内容，与上游一样拒绝含路径分隔符或 .. 的值，避免拼出 state_dir 以外的路径
-    if (type(id) == 'string' && length(id) > 0 && id != 'default' &&
-        !match(id, /[\/\\]/) && index(id, '..') < 0) {
-        let user = (type(active.username) == 'string') ? replace(active.username, /[^A-Za-z0-9_-]/g, '') : '';
-        push(candidates, state_dir + '/profiles.v1/' + id + '.json');
-        push(candidates, state_dir + (length(user) > 0 ? '/' + user : '') + '/' + id + '.json');
-    }
     if (init.config)
         push(candidates, init.config);
     push(candidates,
