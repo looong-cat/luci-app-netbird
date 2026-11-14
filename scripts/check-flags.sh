@@ -72,7 +72,8 @@ HELP="$(get_help "${1:-}")" || exit $?
 # 可用 flag:从 help 抽所有长 flag
 AVAIL="$(printf '%s\n' "$HELP" | grep -oE '\-\-[a-z][a-z0-9-]+' | sort -u)"
 # 已映射 flag:从 init.d 的**非注释行**抽 flag(排除注释行避免取反矩阵/示例里的 flag 名混入)。
-# 不限定 set--/_has_flag 行:因 --preshared-key 出于安全设计不走 set--、而在执行行追加(见 init.d),
+# 不限定 set--/_has_flag 行:因 --preshared-key 出于安全设计不走 set--、执行时经环境变量传入,只在
+# 日志占位行出现(见 init.d),
 # 限定 set-- 会漏掉它(会误报)。非注释行只含真实渲染/门控/执行用到的 flag,无噪音。
 MAPPED="$(grep -vE '^[[:space:]]*#' "$INITD" | grep -oE '\-\-[a-z][a-z0-9-]+' | sort -u)"
 
