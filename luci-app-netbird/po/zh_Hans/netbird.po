@@ -1185,6 +1185,9 @@ msgstr "NetBird 客户端拒绝了该命令，可能版本太旧，不支持此�
 msgid "The NetBird service is not running or not responding. Start it, then try again."
 msgstr "NetBird 服务未运行或无响应，请先启动后再试。"
 
+msgid "Could not pass the setup key to NetBird: writing a temporary file under /var/run failed. Free up memory, then try again."
+msgstr "无法把安装密钥交给 NetBird：在 /var/run 下写临时文件失败。请释放内存后重试。"
+
 msgid "The %s package lists are not loaded (they are cleared on reboot), so netbird cannot be looked up. Run \"%s update\", then reload this page."
 msgstr "%s 的软件包列表尚未加载（重启后会被清空），因此查不到 netbird。请先运行“%s update”，再刷新本页。"
 

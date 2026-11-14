@@ -1641,6 +1641,9 @@ msgstr ""
 msgid "The NetBird service is not running or not responding. Start it, then try again."
 msgstr ""
 
+msgid "Could not pass the setup key to NetBird: writing a temporary file under /var/run failed. Free up memory, then try again."
+msgstr ""
+
 msgid "The %s package lists are not loaded (they are cleared on reboot), so netbird cannot be looked up. Run \"%s update\", then reload this page."
 msgstr ""
 

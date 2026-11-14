@@ -52,8 +52,8 @@ function _exec_short_verb(bin, verb) { if (verb == 'down') downs++; return { std
 function _persist_runtime_error(text) { saved = text; }
 function _clear_runtime_error() { saved = ''; }
 function _set_desired_connected(value) { desired = value; }
-function _build_auth_cmd(bin, verb, url, key) { return ''; }
-function _exec_auth_cmd(cmd, max_bytes, secs) {
+function _run_auth_cmd(bin, verb, url, key, max_bytes, secs) {
+	if (cli.key_error) return { code: 1, stdout: '', key_error: true };
 	for (let line in fresh) push(logs, line);
 	return { code: cli.code != null ? cli.code : 124, stdout: cli.stdout != null ? cli.stdout : 'netbird command timed out after 25 seconds' };
 }
@@ -81,6 +81,8 @@ const BACKEND_CASES = [
 	{ name: 'CLI 读本地服务断开不算管理端不可达', key: 'k', after: [], stdout: 'rpc error: code = Unavailable desc = error reading from server: EOF', code: 1, want: NEUTRAL },
 	{ name: 'CLI 等本地服务超时不算管理端不可达', key: 'k', after: [], stdout: 'rpc error: code = DeadlineExceeded desc = context deadline exceeded', code: 1, want: NEUTRAL },
 	{ name: '已有身份重连:成功', key: '', after: [], stdout: '', code: 0, connected: true, success: true },
+	{ name: 'setup key 临时文件写不出时直接报原因', key: 'k', after: [], keyError: true,
+		want: 'Could not pass the setup key to NetBird', polls: 0 },
 ];
 
 function runBackendCases() {
@@ -90,7 +92,7 @@ function runBackendCases() {
 let cases = ${JSON.stringify(BACKEND_CASES)};
 for (let c in cases) {
 	logs = [ ...(c.before || []) ]; fresh = c.after || []; polls = 0; downs = 0; saved = ''; desired = null;
-	cli = { code: c.code, stdout: c.stdout }; connected = !!c.connected; status_text = null;
+	cli = { code: c.code, stdout: c.stdout, key_error: c.keyError }; connected = !!c.connected; status_text = null;
 	let r = _do_up({ args: { setup_key: c.key, caller: c.caller } });
 	printf('%J\\n', { name: c.name, ok: r.ok, message: r.message, saved, polls, downs, desired });
 }
@@ -368,6 +370,79 @@ function readLog(file) {
 	return out;
 }
 
+const AUTH_CASES = [
+	{ name: '带 key 登录', key: SECRET },
+	{ name: '空 key 不建文件也不设变量', key: '' },
+	{ name: '超时被杀时同样删除临时文件', key: SECRET, hang: true },
+	{ name: '临时文件写不出时不执行', key: SECRET, badDir: true },
+];
+
+function runAuthCmdCases() {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-auth-cmd-test-'));
+	let failed = 0;
+	try {
+		const bin = path.join(dir, 'netbird');
+		writeFakeNetbird(bin);
+		fs.writeFileSync(path.join(dir, 'not-a-dir'), '');
+		const body = ['_build_auth_cmd', '_cli_immediate_error', '_exec_long', '_exec_auth_cmd', '_run_auth_cmd']
+			.map(extract).filter(Boolean).join('\n');
+		AUTH_CASES.forEach((c, i) => {
+			const keyDir = c.badDir ? path.join(dir, 'not-a-dir', 'sub') : path.join(dir, 'keys' + i);
+			const log = path.join(dir, 'log' + i);
+			const pidFile = path.join(dir, 'pid' + i);
+			const file = path.join(dir, 'auth' + i + '.uc');
+			fs.writeFileSync(file, `
+let fs = require('fs');
+let popen = fs.popen, open = fs.open, unlink = fs.unlink, mkdir = fs.mkdir, stat = fs.stat;
+let shell_quote = loadfile(${JSON.stringify(path.join(PKG, 'root/usr/share/rpcd/ucode/lib/shell.uc'))})().shell_quote;
+function _cli_has_flag(bin, verb, flag) { return true; }
+const _NB_AUTH_KEY_DIR = ${JSON.stringify(keyDir)};
+const _NB_AUTH_KEY_FILE = _NB_AUTH_KEY_DIR + '/setup-key';
+${body}
+let key = ${JSON.stringify(c.key)};
+let cmd = _build_auth_cmd(${JSON.stringify(bin)}, 'up', 'https://mgmt.example', length(key) > 0 ? _NB_AUTH_KEY_FILE : null);
+let r = _run_auth_cmd(${JSON.stringify(bin)}, 'up', 'https://mgmt.example', key, 4096, ${c.hang ? 2 : 25});
+let st = stat(_NB_AUTH_KEY_DIR);
+printf('%J\\n', { cmd, r, immediate: _cli_immediate_error(r), file_left: stat(_NB_AUTH_KEY_FILE) != null,
+	dir_perm: st ? st.mode & 0777 : null });
+`);
+			const env = Object.assign({}, process.env, { TEST_LOG: log, TEST_PID_FILE: pidFile,
+				TEST_KEY_FILE: path.join(keyDir, 'setup-key'), TEST_HANG: c.hang ? '1' : '0' });
+			delete env.NB_SETUP_KEY;
+			const res = JSON.parse(execFileSync('ucode', [file], { encoding: 'utf8', env }).trim());
+			const got = readLog(log);
+			const problems = [];
+			if (c.key && res.cmd.includes(c.key)) problems.push('命令串含 key 原文');
+			if (res.cmd.includes('--setup-key')) problems.push('命令串含 --setup-key');
+			if (res.file_left) problems.push('临时文件未删除');
+			if (c.badDir) {
+				if (!res.r.key_error || !res.immediate || !/setup key/.test(res.immediate.message)) problems.push('未报临时文件错误');
+				if (fs.existsSync(pidFile)) problems.push('写文件失败仍执行了 netbird');
+			} else {
+				if (c.key && res.dir_perm !== 0o700) problems.push('目录权限 ' + (res.dir_perm || 0).toString(8));
+				if (!got.ARGV || !got.ARGV.startsWith('up --no-browser --management-url https://mgmt.example')) problems.push('参数异常: ' + got.ARGV);
+				if (c.key && (got.ARGV.includes(c.key) || got.PARENT.includes(c.key))) problems.push('进程命令行含 key');
+				if (got.SETUP_KEY !== '[' + (c.key || '<unset>') + ']') problems.push('NB_SETUP_KEY 为 ' + got.SETUP_KEY);
+				if (c.key && got.KEY_FILE !== 'gone') problems.push('netbird 启动时临时文件仍在');
+				if (c.hang) {
+					if (res.r.code !== 124) problems.push('超时退出码 ' + res.r.code);
+					const pid = fs.readFileSync(pidFile, 'utf8').trim();
+					let alive = true;
+					try { process.kill(Number(pid), 0); } catch (e) { alive = false; }
+					if (alive) problems.push('超时后 netbird 仍在运行');
+				} else if (res.r.code !== 0) {
+					problems.push('退出码 ' + res.r.code);
+				}
+			}
+			console.log((problems.length ? 'FAIL ' : 'ok   ') + '认证命令:' + c.name + (problems.length ? ': ' + problems.join(';') : ''));
+			if (problems.length) failed++;
+		});
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+	return failed;
+}
+
 // 保存设置时的 PSK:真实 _render_and_apply 与 nb_run_bounded,两种有界执行路径都跑。
 const PSK_CASES = [
 	{ name: '有 PSK(无 timeout)', psk: SECRET, timeout: false },
@@ -430,6 +505,7 @@ printf 'AFTER=[%s]\\n' "\${NB_PRESHARED_KEY-<unset>}" >> "$TEST_LOG"
 (async () => {
 	let failed = checkBackendCases(runBackendCases());
 	failed += runRosenpassCases();
+	failed += runAuthCmdCases();
 	failed += runPskCases();
 	failed += await runFrontendCases();
 	failed += runSettingsCases();

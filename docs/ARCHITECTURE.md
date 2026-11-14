@@ -149,6 +149,10 @@ The Authentication tab drives upstream NetBird directly through `do_up` / `do_lo
 
 - Setup keys are write-only RPC parameters. A successful login stores only a masked
   `setup_key_hint`; the raw key is never written to UCI or returned to LuCI.
+- The setup key never appears on a process command line (`/proc/<pid>/cmdline` is readable by
+  every local user). The backend writes it to a root-only file under `/var/run/luci-netbird/`;
+  the shell reads it, deletes the file and hands it to `netbird up/login` as `NB_SETUP_KEY`.
+  The backend deletes the file again when the command returns, including on timeout.
 - `do_up` and `do_login` execute `netbird up/login --no-browser` with a bounded
   wall-clock wrapper (25s for the CLI attempt, then a short connected-state poll). This is
   necessary because current NetBird clients can keep retrying when the management server

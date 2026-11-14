@@ -24,7 +24,7 @@
 // 路径走 NBLIB env override（默认 /usr/share/rpcd/ucode/lib）。
 // shebang 与 'use strict' 在 module 模式下都不允许，已删除。
 
-import { popen, access, open, unlink, lsdir, stat } from 'fs';
+import { popen, access, open, unlink, lsdir, stat, mkdir } from 'fs';
 import * as uci from 'uci';
 
 const _LIB = getenv('NBLIB') || '/usr/share/rpcd/ucode/lib';
@@ -442,21 +442,27 @@ function _cli_has_flag(bin, verb, flag) {
     return _cli_flag_cache[key];
 }
 
-// _build_auth_cmd(bin, verb, mgmt_url, setup_key) → 拼好的命令字符串
+// _build_auth_cmd(bin, verb, mgmt_url, key_file) → 拼好的命令字符串
 // verb ∈ {'up','login'}。二进制支持时加 --no-browser（避免等 SSO 浏览器挂死；旧版无此 flag，
 // headless 环境下省略效果相同）。
-// 所有动态参数（mgmt_url / setup_key）经 shell_quote（防注入）。
-// bin 来自 resolve_netbird_bin（运行时探测），同样 shell_quote。
+// 所有动态参数（bin / mgmt_url / key_file）经 shell_quote（防注入）。
+// setup key 不进命令串：key_file 非空时，shell 从该文件读出 key、立即删文件，再以环境变量
+// NB_SETUP_KEY 交给 netbird（见 _run_auth_cmd）。读取用 $(cat)：除末尾换行外原样保留
+// key 内容，不经 shell 解释。整组放进 { } 并以 exec 结尾，_exec_auth_cmd 后台运行时 $! 就是
+// netbird 本身；export 只发生在这个后台子 shell 里。
 // 长命令不加 5s timeout（业务层自己轮询控时）；2>&1 合并便于回传错误。
-function _build_auth_cmd(bin, verb, mgmt_url, setup_key) {
+function _build_auth_cmd(bin, verb, mgmt_url, key_file) {
     let cmd = shell_quote(bin) + ' ' + verb;
     if (_cli_has_flag(bin, verb, '--no-browser'))
         cmd += ' --no-browser';
     if (mgmt_url != null && length(mgmt_url) > 0)
         cmd += ' --management-url ' + shell_quote(mgmt_url);
-    if (setup_key != null && length(setup_key) > 0)
-        cmd += ' --setup-key ' + shell_quote(setup_key);
     cmd += ' 2>&1';
+    if (key_file != null) {
+        let qf = shell_quote(key_file);
+        cmd = '{ NB_SETUP_KEY=$(cat ' + qf + ') && rm -f ' + qf +
+            ' && export NB_SETUP_KEY && exec ' + cmd + '; }';
+    }
     return cmd;
 }
 
@@ -483,7 +489,11 @@ function _apply_pending_settings() {
 // _cli_immediate_error(r) → { message, hint } | null：认证 CLI 自行返回（未被墙钟杀掉）且属于
 // 轮询也无法改变的失败——参数用法错误、连不上本机 NetBird 服务——时给出原因；其余返回 null
 // 交给原有的轮询与归因。hint 带 CLI 原话首行，便于定位版本差异。
+// key_error（setup key 临时文件没写成，命令未执行）同样立即返回，轮询只会白等。
 function _cli_immediate_error(r) {
+    if (r.key_error)
+        return { message: 'Could not pass the setup key to NetBird: writing a temporary file under /var/run failed. Free up memory, then try again.',
+                 hint: null };
     let out = r.stdout || '';
     if (r.code == 0 || match(out, /netbird command timed out after/))
         return null;
@@ -536,6 +546,40 @@ function _exec_auth_cmd(cmd, max_bytes, secs) {
             'wait $__nbp 2>/dev/null; printf "\\nnetbird command timed out after ' + secs + 's\\n"; exit 124; ' +
         'fi; wait $__nbp; exit $?';
     return _exec_long(wrapped, max_bytes);
+}
+
+// setup key 经环境变量 NB_SETUP_KEY 交给 netbird（上游 up/login 都把 NB_<FLAG> 当作对应
+// flag 读取，效果与 --setup-key 相同）。放在命令行里时，/proc/<pid>/cmdline 对所有本地用户
+// 可读，netbird、包着它的 /bin/sh -c 在 CLI 运行期间（最长约 25 秒）都会暴露 key；进程的
+// 环境变量只有进程属主能读。ucode 的 popen 不能单独给子进程设环境变量，故先写进 root 专属
+// 临时文件（tmpfs 上的 0700 目录 + 以 0600 创建的文件），命令串里只出现文件路径。
+const _NB_AUTH_KEY_DIR = '/var/run/luci-netbird';
+const _NB_AUTH_KEY_FILE = _NB_AUTH_KEY_DIR + '/setup-key';
+
+// _run_auth_cmd(bin, verb, mgmt_url, setup_key, max_bytes?, secs?) → { code, stdout, key_error? }
+// 组装并有界执行认证命令（墙钟语义见 _exec_auth_cmd）。setup key 非空时经临时文件传入；
+// shell 读到后立即删除，返回前无论成败再删一次（shell 没走到 rm 时兜底）。
+// 临时文件写不完整（如 /tmp 所在 tmpfs 写满）时不执行命令，返回 key_error。
+function _run_auth_cmd(bin, verb, mgmt_url, setup_key, max_bytes, secs) {
+    let key_file = (setup_key != null && length(setup_key) > 0) ? _NB_AUTH_KEY_FILE : null;
+    let cmd = _build_auth_cmd(bin, verb, mgmt_url, key_file);
+    if (key_file != null) {
+        mkdir(_NB_AUTH_KEY_DIR, 0700);
+        let f = open(key_file, 'w', 0600);
+        if (f != null) {
+            f.write(setup_key);
+            f.close();
+        }
+        let st = stat(key_file);
+        if (f == null || st == null || st.size != length(setup_key)) {
+            unlink(key_file);
+            return { code: 1, stdout: '', key_error: true };
+        }
+    }
+    let r = _exec_auth_cmd(cmd, max_bytes, secs); // shell-audit-ok: bin/url/路径均经 shell_quote，verb 字面，key 不进命令串
+    if (key_file != null)
+        unlink(key_file);
+    return r;
 }
 
 // _poll_connected(bin, rounds?) → { connected:bool, json:<dict|null> }
@@ -3123,13 +3167,12 @@ function _do_up(req) {
         _mark_settings_pending();
 
     let log_before = _recent_log_text(100);
-    let cmd = _build_auth_cmd(bin, 'up', mr.url, setup_key);
     // watchdog 的周期重连用短墙钟 + 短确认轮询:管理端不可达时 netbird up 内部
     // backoff 不返回,每次尝试都会跑满墙钟;同脚本 RPC 串行使状态页在此期间排队,
     // 长尝试 = 页面长时间假死。健康恢复场景 up 几秒即返回,10s 足够;真不可达时
     // 缩短的只是「注定失败的等待」,下一轮尝试与 30s 状态巡检兜底恢复。
     // 用户点击的连接保持 25s/6 轮:错误归因需要让 CLI/daemon 日志有时间沉淀。
-    let r = _exec_auth_cmd(cmd, 4096, from_watchdog ? 10 : 25); // shell-audit-ok: bin/url/key 均经 shell_quote，verb 字面
+    let r = _run_auth_cmd(bin, 'up', mr.url, setup_key, 4096, from_watchdog ? 10 : 25);
     // 安全加固：若 CLI 把 setup_key 回显进 stdout，先脱敏再用于任何错误回传。
     if (length(setup_key) > 0 && r.stdout != null)
         r.stdout = replace(r.stdout, setup_key, '***');
@@ -3522,8 +3565,7 @@ return {
                     return err(CODE.NOT_INSTALLED, 'The netbird binary is not installed.');
 
                 let log_before = _recent_log_text(100);
-                let cmd = _build_auth_cmd(bin, 'login', mr.url, setup_key);
-                let r = _exec_auth_cmd(cmd, 4096); // shell-audit-ok: bin/url/key 均经 shell_quote，verb 字面
+                let r = _run_auth_cmd(bin, 'login', mr.url, setup_key, 4096);
                 // 安全加固：若 CLI 把 setup_key 回显进 stdout，先脱敏再用于任何错误回传。
                 if (length(setup_key) > 0 && r.stdout != null)
                     r.stdout = replace(r.stdout, setup_key, '***');
