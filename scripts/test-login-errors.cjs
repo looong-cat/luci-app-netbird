@@ -335,9 +335,102 @@ _render_and_apply "$TEST_BIN"
 	return failed;
 }
 
+// 密钥不进命令行:/proc/<pid>/cmdline 对所有本地用户可读。用真实的命令组装、有界执行和 shell,
+// 只把 netbird 换成记录参数、环境变量和父进程命令行的脚本。
+const SECRET = "a'b \"c\" $(id) `id` \\ *;|& 中文 ";
+
+function writeFakeNetbird(file) {
+	fs.writeFileSync(file, `#!/bin/sh
+case "$*" in
+	*--help*) printf '  --no-browser\\n'; exit 0 ;;
+	down) exit 0 ;;
+esac
+{
+	printf 'ARGV=%s\\n' "$*"
+	printf 'SETUP_KEY=[%s]\\n' "\${NB_SETUP_KEY-<unset>}"
+	printf 'PSK=[%s]\\n' "\${NB_PRESHARED_KEY-<unset>}"
+	[ -e "$TEST_KEY_FILE" ] && echo 'KEY_FILE=present' || echo 'KEY_FILE=gone'
+	printf 'PARENT=%s\\n' "$(ps -o args= -p $PPID)"
+} >> "$TEST_LOG"
+echo $$ > "$TEST_PID_FILE"
+[ "$TEST_HANG" = 1 ] && exec sleep 30
+exit 0
+`, { mode: 0o755 });
+}
+
+function readLog(file) {
+	const out = {};
+	if (!fs.existsSync(file)) return out;
+	for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+		const i = line.indexOf('=');
+		if (i > 0) out[line.slice(0, i)] = line.slice(i + 1);
+	}
+	return out;
+}
+
+// 保存设置时的 PSK:真实 _render_and_apply 与 nb_run_bounded,两种有界执行路径都跑。
+const PSK_CASES = [
+	{ name: '有 PSK(无 timeout)', psk: SECRET, timeout: false },
+	{ name: '有 PSK(经 timeout)', psk: SECRET, timeout: true },
+	{ name: '未配置 PSK 不导出变量', psk: '', timeout: false },
+	{ name: '未配置 PSK 不导出变量(经 timeout)', psk: '', timeout: true },
+];
+
+function runPskCases() {
+	const init = fs.readFileSync(path.join(PKG, 'root/etc/init.d/netbird-settings'), 'utf8')
+		.replace(/^\s*\. \/usr\/share\/netbird\/nb-run-bounded\.sh$/m, '. ' + path.join(PKG, 'root/usr/share/netbird/nb-run-bounded.sh'))
+		.replace(/^\s*\. \/usr\/share\/netbird\/.*$/gm, ':');
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-psk-test-'));
+	let failed = 0;
+	try {
+		const bin = path.join(dir, 'netbird');
+		writeFakeNetbird(bin);
+		const tbin = path.join(dir, 'tbin');
+		fs.mkdirSync(tbin);
+		fs.writeFileSync(path.join(tbin, 'timeout'), `#!/bin/sh
+printf 'TIMEOUT=%s\\n' "$*" >> "$TEST_LOG"
+shift
+exec "$@"
+`, { mode: 0o755 });
+		const file = path.join(dir, 'settings.sh');
+		fs.writeFileSync(file, init + `
+NB_SETTINGS_APPLIED="$TEST_APPLIED"
+uci() { case "$*" in *preshared_key) printf '%s' "$TEST_PSK" ;; esac; }
+logger() { :; }
+_NB_HAS_TIMEOUT=$TEST_HAS_TIMEOUT
+_render_and_apply "$TEST_BIN"
+printf 'AFTER=[%s]\\n' "\${NB_PRESHARED_KEY-<unset>}" >> "$TEST_LOG"
+`);
+		PSK_CASES.forEach((c, i) => {
+			const log = path.join(dir, 'log' + i);
+			const env = Object.assign({}, process.env, { TEST_BIN: bin, TEST_PSK: c.psk, TEST_LOG: log,
+				TEST_HAS_TIMEOUT: c.timeout ? '1' : '0', TEST_APPLIED: path.join(dir, 'applied' + i),
+				TEST_PID_FILE: path.join(dir, 'pid' + i), TEST_KEY_FILE: path.join(dir, 'none'),
+				PATH: (c.timeout ? tbin + ':' : '') + process.env.PATH });
+			delete env.NB_PRESHARED_KEY;
+			execFileSync('/bin/sh', [file], { encoding: 'utf8', env });
+			const text = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
+			const got = readLog(log);
+			const problems = [];
+			if (!got.ARGV || !got.ARGV.startsWith('up ')) problems.push('没有执行 netbird up');
+			if (text.includes('--preshared-key')) problems.push('命令行含 --preshared-key');
+			if (c.psk && text.replace(/^PSK=.*$/m, '').includes(c.psk)) problems.push('PSK 出现在命令行');
+			if (got.PSK !== '[' + (c.psk || '<unset>') + ']') problems.push('NB_PRESHARED_KEY 为 ' + got.PSK);
+			if (c.timeout && !got.TIMEOUT) problems.push('没有经过 timeout');
+			if (got.AFTER !== '[<unset>]') problems.push('PSK 留在了脚本环境里');
+			console.log((problems.length ? 'FAIL ' : 'ok   ') + 'PSK:' + c.name + (problems.length ? ': ' + problems.join(';') : ''));
+			if (problems.length) failed++;
+		});
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+	return failed;
+}
+
 (async () => {
 	let failed = checkBackendCases(runBackendCases());
 	failed += runRosenpassCases();
+	failed += runPskCases();
 	failed += await runFrontendCases();
 	failed += runSettingsCases();
 	if (failed) {

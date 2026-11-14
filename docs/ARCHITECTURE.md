@@ -48,8 +48,10 @@ the management URL) are display-only.
   `list device` *before* netbird re-establishes (firewall reload must precede `netbird up`, or
   forwarding breaks). Only the firewall is reloaded — **never the network** — so even a rename
   never flushes the live device.
-- **Pre-shared key is never logged**: it is not placed in `$@`; it is appended only at exec time,
-  and logs/dry-run show a static `--preshared-key ***`.
+- **Pre-shared key is never logged or put on a command line**: it is not placed in `$@`; it
+  reaches `netbird up` only through the `NB_PRESHARED_KEY` environment variable, exported in a
+  subshell for that single call (and not exported at all when no key is configured, so the daemon
+  keeps its current value). Logs/dry-run show a static `--preshared-key ***`.
 
 ## Versions tab
 

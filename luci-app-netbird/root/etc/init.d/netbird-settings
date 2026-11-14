@@ -210,8 +210,8 @@ _render_and_apply() {
 	# 敏感：WireGuard 预共享密钥（write-only）。**故意不放进 $@**——否则 $* 进 logread/dry-run
 	# 时整条命令含 PSK 原文，得靠脱敏；而脱敏正则对含空格的值会半脱敏泄露尾段，密钥脱敏不能依赖
 	# 前端校验（ACL 允许直接 uci 写 PSK，可绕过前端无空白校验）。改为：PSK 不入 $@，日志只显示
-	# 静态占位 `--preshared-key ***`（psk_disp），真正的 --preshared-key 仅在下方执行处作为位置参数
-	# 追加（与 set-- 等价、防注入）。如此 PSK 原文绝不进任何被打印的串，无论其内容。
+	# 静态占位 `--preshared-key ***`（psk_disp），真正的 PSK 仅在下方执行处经环境变量交给 netbird
+	# （不进命令行）。如此 PSK 原文绝不进任何被打印的串，无论其内容。
 	psk_disp=""
 	[ -n "$psk" ] && psk_disp=" --preshared-key ***"
 
@@ -301,9 +301,16 @@ _render_and_apply() {
 
 	logger -t "$TAG" "applying: netbird $*$psk_disp"
 	tmp="$(mktemp 2>/dev/null || echo /tmp/nb-settings-$$.log)"
-	# PSK 不在 $@ 里，仅在执行时作为位置参数追加（防注入）；其值绝不进上面的日志串。
+	# PSK 不在 $@ 里，也不进任何进程的命令行（/proc/<pid>/cmdline 对所有本地用户可读，timeout
+	# 和 netbird 的参数都会暴露）：改由环境变量 NB_PRESHARED_KEY 交给 netbird，上游 up 把它当作
+	# --preshared-key 读取。只在子 shell 里 export，不留给本脚本后续的 netbird 调用。未配置时不导出：
+	# 上游按「变量存在」取值，空值会被当成显式传了空 PSK，而原语义是不传、保持 daemon 现值。
 	if [ -n "$psk" ]; then
-		nb_run_bounded 45 "$bin" "$@" --preshared-key "$psk" >"$tmp" 2>&1
+		(
+			NB_PRESHARED_KEY="$psk"
+			export NB_PRESHARED_KEY
+			nb_run_bounded 45 "$bin" "$@"
+		) >"$tmp" 2>&1
 	else
 		nb_run_bounded 45 "$bin" "$@" >"$tmp" 2>&1
 	fi
