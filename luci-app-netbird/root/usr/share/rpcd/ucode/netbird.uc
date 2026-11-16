@@ -1565,6 +1565,14 @@ function _dl_sends_headers() {
     return _dl_headers_ok;
 }
 
+// _official_needs_curl() → 下载官方版前是否必须先装 curl。
+//   只有 uclient-fetch 不能带请求头时才是:它只能走 github.com 直链,而 github.com 的响应带一行
+//   4KB 以上的头,uclient-fetch 读到就停住直到超时。真正的 BusyBox wget 会读完并丢弃超长头行,
+//   即使编译时没开长选项(--help 里没有 --header)也能走直链,不拦它。
+function _official_needs_curl() {
+    return _dl_tool() == 'uclient-fetch' && !_dl_sends_headers();
+}
+
 // _github_asset_api_url(ver, filename) → 该 release 资产的 API 下载地址 | ''。
 //   下载器不能带请求头时返回 '',调用方回落 releases/download 直链。
 function _github_asset_api_url(ver, filename) {
@@ -2349,7 +2357,7 @@ function _do_get_binary_info(req) {
         opkg_upgradable:  opkg_upgradable,
         pkg_mgr:          _pkg_mgr(),
         // 下载器不能带请求头时官方版下载会直接失败(见 _update_binary_locked),版本页据此提前提示装 curl。
-        official_needs_curl: !_dl_sends_headers(),
+        official_needs_curl: _official_needs_curl(),
         update_available: update_available,
         release_url:      _uci_binary('release_url', ''),
         luci_app_version: opkg.luci_app_netbird || '',
@@ -2486,7 +2494,7 @@ function _update_binary_locked(req) {
         // uclient-fetch 读到这种超长头行就停住,一直等到 -T 超时才报 Connection timed out。
         // 所以在发起任何 GitHub 请求之前就失败,让首连自动下载也能立刻回落软件源。
         // 文案固定(按包管理器二选一),后台进度只回传 message,固定串前端才能按 po 翻译。
-        if (!_dl_sends_headers())
+        if (_official_needs_curl())
             return fail_pre(CODE.DOWNLOAD_FAILED, _pkg_mgr() == 'apk'
                 ? 'The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "apk update && apk add curl", then try again.'
                 : 'The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "opkg update && opkg install curl", then try again.');

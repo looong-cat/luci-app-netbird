@@ -52,6 +52,7 @@ function _latest_version() { push(cmds, 'NET latest'); return '${VER}'; }
 function _github_asset_api_url(ver, name) { push(cmds, 'NET api ' + name); return ''; }
 function _http_content_length(url, headers) { push(cmds, 'NET length ' + url); return 0; }
 function _dl_sends_headers() { return !tc.no_headers; }
+function _official_needs_curl() { return !!tc.no_headers; }
 function _pkg_mgr() { return tc.pkg_mgr || 'opkg'; }
 
 function _dl_cmd(url, out, secs, total, headers) { return 'DL ' + url + ' > ' + out; }
@@ -202,6 +203,36 @@ printf('%J\\n', { before, after });
 	}
 }
 
+// 「必须先装 curl」的分类:用真实的 _dl_tool / _dl_sends_headers / _official_needs_curl,
+// 只替换文件存在判断和 --help 输出。只有不能带头的 uclient-fetch 才需要 curl;
+// 真正的 BusyBox wget(读得了超长头)即使 --help 里没有 --header 也不拦。
+function runNeedsCurl(sc) {
+	const fn = extract('_dl_tool') + '\nlet _dl_headers_ok = null;\n' + extract('_dl_sends_headers') + '\n' + extract('_official_needs_curl');
+	assert(fn.includes('function _official_needs_curl('), '未提取到 _official_needs_curl');
+	const code = `
+let files = ${JSON.stringify(sc.files)};
+let help = ${JSON.stringify(sc.help)};
+function access(p, mode) { return index(files, p) >= 0; }
+function _popen_simple(cmd) { return { code: 0, out: help }; }
+` + fn + `
+printf('%J\\n', { tool: _dl_tool(), needs: _official_needs_curl() });
+`;
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-needs-curl-'));
+	const file = path.join(dir, 'probe.uc');
+	fs.writeFileSync(file, code);
+	try {
+		return JSON.parse(execFileSync('ucode', [file], { encoding: 'utf8' }).trim());
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+}
+const NEEDS_CURL_CASES = [
+	{ name: '分类:有 curl → 不需要', files: ['/usr/bin/curl', '/bin/uclient-fetch'], help: '', tool: 'curl', needs: false },
+	{ name: '分类:uclient-fetch 支持 --header(24.10 起)→ 不需要', files: ['/bin/uclient-fetch'], help: 'Usage: uclient-fetch\n  --header=<header>\n', tool: 'uclient-fetch', needs: false },
+	{ name: '分类:uclient-fetch 不支持 --header(22.03/23.05)→ 需要', files: ['/bin/uclient-fetch'], help: 'Usage: uclient-fetch [options] <URL>\n', tool: 'uclient-fetch', needs: true },
+	{ name: '分类:BusyBox wget 未开长选项 → 不需要', files: [], help: 'Usage: wget [-cqS] [-O FILE] [-T SEC] URL\n', tool: 'wget', needs: false },
+];
+
 const results = run();
 let failed = 0;
 CASES.forEach((c, i) => {
@@ -263,6 +294,18 @@ ENSURE_CASES.forEach((c, i) => {
 		problem = e.message;
 	}
 	console.log((problem ? 'FAIL ' : 'ok   ') + name + (problem ? ': ' + problem : ''));
+	if (problem) failed++;
+}
+for (const c of NEEDS_CURL_CASES) {
+	let problem = '';
+	try {
+		const res = runNeedsCurl(c);
+		assert.equal(res.tool, c.tool, '下载器识别不符');
+		assert.equal(res.needs, c.needs, '是否需要 curl 判断不符');
+	} catch (e) {
+		problem = e.message;
+	}
+	console.log((problem ? 'FAIL ' : 'ok   ') + c.name + (problem ? ': ' + problem : ''));
 	if (problem) failed++;
 }
 if (failed) {

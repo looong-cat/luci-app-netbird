@@ -84,11 +84,12 @@ distro feed". The four feed touchpoints (`_pkg_mgr`, `_opkg_feed_has_netbird`,
 `_dl_cmd` (curl → uclient-fetch → BusyBox wget) so the release/custom paths work on minimal
 images without curl. The official release path additionally needs a downloader that can send
 request headers (curl, or uclient-fetch from 24.10 on): the binary and its checksum list are then
-fetched through api.github.com asset URLs. github.com pages and release redirects carry a single
-Content-Security-Policy header line over 4 KB, which the uclient-fetch shipped with 22.03/23.05
-cannot read — it stalls until its timeout. So when the downloader cannot send headers, an official
-download (manual or the first-connect automatic one) fails before any GitHub request with a message
-asking the user to install curl, and the first connect falls back to the feed binary at once.
+fetched through api.github.com asset URLs. Other downloaders fall back to github.com release links.
+github.com pages and release redirects carry a single Content-Security-Policy header line over 4 KB,
+which uclient-fetch cannot read — it stalls until its timeout (BusyBox wget reads past such lines).
+So when the downloader is a uclient-fetch without header support (22.03/23.05 without curl), an
+official download (manual or the first-connect automatic one) fails before any GitHub request with a
+message asking the user to install curl, and the first connect falls back to the feed binary at once.
 `get_binary_info.official_needs_curl` lets the Versions page show the same hint in advance.
 Custom URLs are not affected.
 
