@@ -1552,13 +1552,16 @@ function _popen_simple(cmd) {
 
 // _dl_sends_headers() → 当前下载器能否附加请求头(API asset 下载必须带 Accept 头)。
 //   curl 恒可;uclient-fetch 到 24.10 才有 --header,22.03/23.05 自带版本遇到该参数会直接报用法错误、
-//   整条下载失败,故按 --help 实测。结果在本进程内缓存。
+//   整条下载失败,故按 --help 实测。
+//   只缓存非 curl 下载器的 --help 探测结果,curl 每次按文件重新判断:rpcd 常驻进程里若把「没有 curl」
+//   缓存下来,用户按提示装好 curl 后,首连自动下载和版本页提示要等 rpcd 重启才会认到。
 let _dl_headers_ok = null;
 function _dl_sends_headers() {
-    if (_dl_headers_ok == null) {
-        let tool = _dl_tool();
-        _dl_headers_ok = (tool == 'curl') || index(_popen_simple(tool + ' --help 2>&1').out, '--header') >= 0;
-    }
+    let tool = _dl_tool();
+    if (tool == 'curl')
+        return true;
+    if (_dl_headers_ok == null)
+        _dl_headers_ok = index(_popen_simple(tool + ' --help 2>&1').out, '--header') >= 0;
     return _dl_headers_ok;
 }
 
@@ -2345,6 +2348,8 @@ function _do_get_binary_info(req) {
         latest_version:   latest,
         opkg_upgradable:  opkg_upgradable,
         pkg_mgr:          _pkg_mgr(),
+        // 下载器不能带请求头时官方版下载会直接失败(见 _update_binary_locked),版本页据此提前提示装 curl。
+        official_needs_curl: !_dl_sends_headers(),
         update_available: update_available,
         release_url:      _uci_binary('release_url', ''),
         luci_app_version: opkg.luci_app_netbird || '',
@@ -2413,6 +2418,7 @@ function _binop_guard(fn, req) {
 // 经 symlink 决定。决策树(失败忠实传播,尽量不让 box 处于无 netbird 可用态):
 //   1. arch 解析过白名单 → arch_mismatch
 //   2. 解析下载 URL+文件名:custom 用 args.url(校验 http/https);否则 GitHub latest 拼 URL
+//      (官方来源而下载器不能带请求头 → download_failed,提示装 curl,不发任何请求)
 //   3. 下载 tarball 到 /tmp → download_failed
 //   4. sha256 校验(有版本号则去 GitHub 抓对应 checksums;官方路径取不到或无对应条目也中止;
 //      custom 镜像同版本亦可校验,无则跳过记 note)→ checksum_mismatch
@@ -2474,6 +2480,16 @@ function _update_binary_locked(req) {
         if (vm)
             ver = vm[1];
     } else {
+        // 官方来源必须用能带请求头的下载器(curl,或 24.10 起的 uclient-fetch):这样二进制和校验和
+        // 都走 api.github.com 的资产地址。不能带头时只能走 github.com 的 releases/download 直链,
+        // 而 github.com 的页面和 302 都带一行 4KB 以上的 Content-Security-Policy 头,22.03/23.05 自带的
+        // uclient-fetch 读到这种超长头行就停住,一直等到 -T 超时才报 Connection timed out。
+        // 所以在发起任何 GitHub 请求之前就失败,让首连自动下载也能立刻回落软件源。
+        // 文案固定(按包管理器二选一),后台进度只回传 message,固定串前端才能按 po 翻译。
+        if (!_dl_sends_headers())
+            return fail_pre(CODE.DOWNLOAD_FAILED, _pkg_mgr() == 'apk'
+                ? 'The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "apk update && apk add curl", then try again.'
+                : 'The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "opkg update && opkg install curl", then try again.');
         ver = _latest_version();
         if (!match(ver, _SEMVER_RE))
             return fail_pre(CODE.INVALID_INPUT, 'Could not fetch or parse the latest version from GitHub (network failure or unexpected format).');

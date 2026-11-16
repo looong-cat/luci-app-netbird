@@ -82,7 +82,15 @@ distro feed". The four feed touchpoints (`_pkg_mgr`, `_opkg_feed_has_netbird`,
 `apk fetch` + `apk extract --allow-untrusted` (an OpenWRT `.apk` is apk-v3 ADB, unreadable by
 `tar`); **never** `apk add/del/fix` (would delete the daemon's `init.d`). Downloads use
 `_dl_cmd` (curl → uclient-fetch → BusyBox wget) so the release/custom paths work on minimal
-images without curl.
+images without curl. The official release path additionally needs a downloader that can send
+request headers (curl, or uclient-fetch from 24.10 on): the binary and its checksum list are then
+fetched through api.github.com asset URLs. github.com pages and release redirects carry a single
+Content-Security-Policy header line over 4 KB, which the uclient-fetch shipped with 22.03/23.05
+cannot read — it stalls until its timeout. So when the downloader cannot send headers, an official
+download (manual or the first-connect automatic one) fails before any GitHub request with a message
+asking the user to install curl, and the first connect falls back to the feed binary at once.
+`get_binary_info.official_needs_curl` lets the Versions page show the same hint in advance.
+Custom URLs are not affected.
 
 **Download durability and cleanup.** Binary downloads that create a new persistent file first run a
 best-effort overlay free-space preflight; low space fails early with `insufficient_space` instead of

@@ -1685,3 +1685,9 @@ msgstr ""
 
 msgid "Could not download the official checksum list, so the download was not installed. Check that the router can reach github.com, then try again."
 msgstr ""
+
+msgid "The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with \"opkg update && opkg install curl\", then try again."
+msgstr ""
+
+msgid "The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with \"apk update && apk add curl\", then try again."
+msgstr ""

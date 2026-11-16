@@ -1229,3 +1229,9 @@ msgstr "官方校验和列表里没有这个下载文件的条目，无法核对
 
 msgid "Could not download the official checksum list, so the download was not installed. Check that the router can reach github.com, then try again."
 msgstr "无法下载官方校验和列表，下载的文件未经核对，未安装。请检查路由器能否访问 github.com，然后重试。"
+
+msgid "The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with \"opkg update && opkg install curl\", then try again."
+msgstr "这台路由器自带的下载工具读不了 GitHub 的响应，无法下载官方版本。请先安装 curl（运行 \"opkg update && opkg install curl\"），然后重试。"
+
+msgid "The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with \"apk update && apk add curl\", then try again."
+msgstr "这台路由器自带的下载工具读不了 GitHub 的响应，无法下载官方版本。请先安装 curl（运行 \"apk update && apk add curl\"），然后重试。"

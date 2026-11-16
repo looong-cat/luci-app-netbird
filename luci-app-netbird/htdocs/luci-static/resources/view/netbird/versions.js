@@ -59,6 +59,14 @@ function pkgFetchCommand(d) {
 	return (pkgMgrName(d) === 'apk') ? 'apk fetch' : 'opkg download';
 }
 
+// 下载器读不了 github.com 的超长响应头时,官方版下载会被后端直接拒绝;文案与后端失败 message 同串,
+// 版本页提前提示和下载失败提示共用一条翻译。
+function curlRequiredText(d) {
+	return (pkgMgrName(d) === 'apk')
+		? _('The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "apk update && apk add curl", then try again.')
+		: _('The download tool built into this router cannot read the responses from GitHub, so the official release cannot be downloaded. Install curl with "opkg update && opkg install curl", then try again.');
+}
+
 function srcLabel(src) {
 	if (src === 'release') return 'NetBird-Release';
 	if (src === 'opkg')    return 'NetBird-OpenWrt';
@@ -425,6 +433,8 @@ return view.extend({
 			rows.push(E('p', { 'class': 'cbi-section-descr' }, _('This is the official NetBird Release build.')));
 			rows.push(nb.pair(_('Version'), rel.installed ? (fmtVer(rel.version) || '-') : _('Not installed')));
 			rows.push(nb.pair(_('Path'), rel.path || '/usr/share/netbird/bin/netbird-release'));
+			if (d.official_needs_curl)
+				rows.push(E('p', { 'class': 'cbi-section-descr', 'style': 'color:#a00' }, curlRequiredText(d)));
 			self._relCheck = E('div', { 'style': 'margin:.5em 0' });
 			rows.push(self._relCheck);
 			// 所有操作按钮同进一个 cbi-section-actions(左对齐):检测更新 +(有新版才)立即更新 +(非 active 才)切换。
