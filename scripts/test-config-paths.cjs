@@ -44,7 +44,8 @@ const CASES = [
 			'var/lib/netbird/state.json': '{}',
 		},
 		url: 'https://opkg.example:443',
-		wipe: ['etc/netbird/config.json'],
+		// NB_CONFIG 只改 default profile 路径,0.74+ 的其他状态仍写在上游默认目录 /var/lib/netbird
+		wipe: ['etc/netbird/config.json', 'var/lib/netbird/active_profile.json', 'var/lib/netbird/state.json'],
 	},
 	{
 		name: 'apk 布局:NB_STATE_DIR + default.json + active profile 文件',
@@ -66,12 +67,43 @@ const CASES = [
 			'var/lib/netbird/active_profile.json': DEFAULT_ACTIVE,
 		},
 		url: 'https://bare.example',
-		wipe: [],
+		wipe: ['var/lib/netbird/active_profile.json', 'var/lib/netbird/default.json'],
 	},
 	{
 		name: '没有 init 脚本时按上游默认目录找',
 		files: { 'var/lib/netbird/default.json': cfg('noinit.example') },
 		url: 'https://noinit.example',
+		wipe: ['var/lib/netbird/default.json'],
+	},
+	{
+		name: 'init 无 env + 官方 0.83 + 旧版遗留 /etc/netbird/config.json:两处身份都删,子目录不动',
+		files: {
+			'etc/init.d/netbird': BARE_INIT,
+			'etc/netbird/config.json': cfg('old.example'),
+			'var/lib/netbird/default.json': cfg('new.example'),
+			'var/lib/netbird/active_profile.json': DEFAULT_ACTIVE,
+			'var/lib/netbird/state.json': '{}',
+			'var/lib/netbird/root/work.json': cfg('work.example'),
+			'var/lib/netbird/profiles.v1/a1b2c3.json': cfg('v1.example'),
+		},
+		url: 'https://new.example',
+		wipe: [
+			'etc/netbird/config.json',
+			'var/lib/netbird/active_profile.json',
+			'var/lib/netbird/default.json',
+			'var/lib/netbird/state.json',
+		],
+	},
+	{
+		name: '声明了 NB_STATE_DIR 时不删 /var/lib/netbird 下的 json',
+		files: {
+			'etc/init.d/netbird': APK_INIT,
+			'root/.config/netbird/default.json': cfg('apk.example'),
+			'var/lib/netbird/default.json': cfg('bare.example'),
+			'var/lib/netbird/active_profile.json': DEFAULT_ACTIVE,
+		},
+		url: 'https://apk.example',
+		wipe: ['root/.config/netbird/default.json'],
 	},
 	{
 		name: '升级后新旧文件并存:default.json 优先于旧 config.json',

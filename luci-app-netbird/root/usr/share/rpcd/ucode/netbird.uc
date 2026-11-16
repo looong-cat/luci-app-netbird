@@ -393,16 +393,22 @@ function _mgmt_url_from_config() {
 //   - 上游 Linux 默认 /var/lib/netbird/config.json；
 //   - netbird 0.74+ profile 布局把身份放 NB_STATE_DIR/<profile>.json
 //     （含 active_profile.json，apk 包 init 传 NB_STATE_DIR=/root/.config/netbird）。
+//   - init 不传 NB_STATE_DIR 时（22.03/23.05 软件源包的 init 什么 env 都不传，换成官方
+//     0.74+ 二进制后即如此），daemon 用上游默认状态目录 /var/lib/netbird，身份在其中的
+//     default.json；只传 NB_CONFIG 也一样，它只改 default profile 的文件路径，
+//     active_profile.json、state.json 仍写在 /var/lib/netbird。
 // 优先解析 init 脚本实际声明的路径，再叠加已知默认路径兜底；全部幂等（不存在即跳过）。
-// 删除范围：上面的固定文件、init 声明的 NB_CONFIG，以及 /root/.config/netbird 和 init 声明的
-// NB_STATE_DIR 两个目录顶层的 *.json（不进子目录）。
+// 删除范围：上面的固定文件、init 声明的 NB_CONFIG，以及状态目录顶层的 *.json（不进子目录，
+// 命令行另建的 profile 在子目录里）。状态目录是 /root/.config/netbird 加上 init 声明的
+// NB_STATE_DIR；init 没声明 NB_STATE_DIR（含没有 init 脚本）时改为加上 /var/lib/netbird。
+// 声明了 NB_STATE_DIR 时 daemon 不再使用 /var/lib/netbird，那里除固定的旧 config.json 外不删。
 // 仅供 do_logout local_only 分支（用户二次确认后的显式销毁）调用；调用前必须已停 daemon。
 function _wipe_local_identity() {
     let candidates = [ '/etc/netbird/config.json', '/var/lib/netbird/config.json' ];
     let state_dirs = [ '/root/.config/netbird' ];
     let init = _netbird_init_paths();
     if (init.config) push(candidates, init.config);
-    if (init.state_dir) push(state_dirs, init.state_dir);
+    push(state_dirs, init.state_dir || '/var/lib/netbird');
     for (let d in uniq(state_dirs)) {
         let entries = lsdir(d);
         if (entries)
