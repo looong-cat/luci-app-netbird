@@ -18,6 +18,7 @@ Starting with this release, the app and its GitHub Releases show the version as 
 - When no management URL is saved in the app, the Authentication page again pre-fills it from NetBird's own configuration on NetBird 0.74 and later, including apk-based systems.
 - On OpenWrt 22.03, settings the app writes itself are saved again. Its `ucode` version rejects committing a single named config, so switching the NetBird binary source, setting up or removing the firewall zone and forwarding, the saved exit node, the "stay connected" state and the management URL were silently lost. For example, switching to the package-feed binary was undone on the next connect.
 - On routers without `curl` whose built-in downloader cannot send request headers (OpenWrt 22.03 and 23.05), downloading the official NetBird binary now stops at once and asks you to install `curl`. That downloader cannot read GitHub's long response headers, so the download used to wait until it timed out. The Versions page shows the same note in advance.
+- "Remove local identity only" now also clears NetBird's default state directory when the `netbird` service does not set its own. On OpenWrt 22.03 and 23.05 with the official NetBird release (0.74 or later), it used to report success while the router stayed logged in.
 
 ## 0.2.1-r1 — 2026-11-07
 
