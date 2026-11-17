@@ -3,7 +3,7 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.2.2 — Unreleased
+## 0.2.2 — 2026-11-17
 
 Starting with this release, the app and its GitHub Releases show the version as `x.y.z`. The package files and the package feed keep the `-r1` suffix (`0.2.2-r1`), so routers running earlier versions still find this update.
 
