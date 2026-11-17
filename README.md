@@ -36,6 +36,8 @@ sh -c "$(curl -fsSL https://luci-app-netbird.okk.sh/install.sh)"
 wget -O - https://luci-app-netbird.okk.sh/install.sh | sh
 ```
 
+On OpenWrt 22.03 and 23.05 without `curl`, the script also installs `curl` (about 250 KB): the downloader built into those releases cannot download the official NetBird release from GitHub.
+
 Afterwards manage it normally — `opkg`/`apk` on the command line, or **LuCI → System → Software**. The package is architecture-independent (`PKGARCH:=all`); open it at **Services → NetBird**.
 
 <details><summary><b>Add the feed only, then install yourself</b></summary>

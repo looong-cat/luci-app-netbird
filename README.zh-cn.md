@@ -36,6 +36,8 @@ sh -c "$(curl -fsSL https://luci-app-netbird.okk.sh/install-zh.sh)"
 wget -O - https://luci-app-netbird.okk.sh/install-zh.sh | sh
 ```
 
+在没有 `curl` 的 OpenWrt 22.03 和 23.05 上,脚本会顺带安装 `curl`(约 250 KB):这两个版本自带的下载工具无法从 GitHub 下载官方版 NetBird。
+
 之后照常管理 —— 命令行 `opkg`/`apk`,或 **LuCI → 系统 → 软件包**。本插件与架构无关(`PKGARCH:=all`);在 **服务 → NetBird** 中访问。
 
 <details><summary><b>只添加软件源(自己再装)</b></summary>

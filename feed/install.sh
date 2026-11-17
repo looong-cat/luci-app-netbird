@@ -25,5 +25,18 @@ else
 	apk add luci-app-netbird
 fi
 
+# OpenWrt 22.03/23.05 ship a uclient-fetch that stops reading on github.com's 4KB+ response
+# headers, so without curl the app cannot download the official NetBird release. Install curl
+# there (about 250KB with libcurl). A failure here does not undo the installation.
+if ! command -v curl >/dev/null 2>&1 && command -v uclient-fetch >/dev/null 2>&1 \
+	&& ! uclient-fetch --help 2>&1 | grep -q -- '--header'; then
+	echo "Installing curl, needed to download the official NetBird release on this OpenWrt version..."
+	if [ -x /bin/opkg ]; then
+		opkg install curl || echo "Warning: could not install curl; install it later with \"opkg install curl\" to use the official NetBird release." >&2
+	else
+		apk add curl || echo "Warning: could not install curl; install it later with \"apk add curl\" to use the official NetBird release." >&2
+	fi
+fi
+
 echo ""
 echo "Done. Open LuCI -> Services -> NetBird."

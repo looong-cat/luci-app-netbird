@@ -25,5 +25,18 @@ else
 	apk add luci-app-netbird luci-i18n-netbird-zh-cn
 fi
 
+# OpenWrt 22.03/23.05 自带的 uclient-fetch 遇到 github.com 4KB 以上的响应头就停住,
+# 没有 curl 时插件下载不了官方版 NetBird,所以在这类系统上顺带装 curl(连同 libcurl 约 250KB)。
+# 这一步失败不影响已经装好的插件。
+if ! command -v curl >/dev/null 2>&1 && command -v uclient-fetch >/dev/null 2>&1 \
+	&& ! uclient-fetch --help 2>&1 | grep -q -- '--header'; then
+	echo "正在安装 curl(在这个 OpenWrt 版本上下载官方版 NetBird 需要它)..."
+	if [ -x /bin/opkg ]; then
+		opkg install curl || echo "警告:curl 安装失败;之后可以用 \"opkg install curl\" 补装,补装后才能使用官方版 NetBird。" >&2
+	else
+		apk add curl || echo "警告:curl 安装失败;之后可以用 \"apk add curl\" 补装,补装后才能使用官方版 NetBird。" >&2
+	fi
+fi
+
 echo ""
 echo "完成。打开 LuCI -> 服务 -> NetBird。"

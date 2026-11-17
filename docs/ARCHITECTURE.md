@@ -90,7 +90,9 @@ which uclient-fetch cannot read — it stalls until its timeout (BusyBox wget re
 So when the downloader is a uclient-fetch without header support (22.03/23.05 without curl), an
 official download (manual or the first-connect automatic one) fails before any GitHub request with a
 message asking the user to install curl, and the first connect falls back to the feed binary at once.
-`get_binary_info.official_needs_curl` lets the Versions page show the same hint in advance.
+`get_binary_info.official_needs_curl` lets the Versions page show the same hint in advance, and
+`feed/install.sh` / `install-zh.sh` install curl under the same condition (no curl, uclient-fetch
+without `--header`); a failed curl install only prints a warning.
 Custom URLs are not affected.
 
 **Download durability and cleanup.** Binary downloads that create a new persistent file first run a
